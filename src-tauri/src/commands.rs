@@ -1,0 +1,121 @@
+use tauri::{AppHandle, Manager, Window};
+use crate::db::{Database, Note, Settings};
+use crate::note_window::create_note_window;
+
+#[tauri::command]
+pub fn create_note(app: AppHandle, pos_x: Option<i32>, pos_y: Option<i32>) -> Result<Note, String> {
+    let db = app.state::<Database>();
+    let x = pos_x.unwrap_or(100);
+    let y = pos_y.unwrap_or(100);
+
+    let note = db.create_note(x, y).map_err(|e| e.to_string())?;
+    create_note_window(&app, &note)?;
+
+    Ok(note)
+}
+
+#[tauri::command]
+pub fn get_note(app: AppHandle, id: String) -> Result<Option<Note>, String> {
+    let db = app.state::<Database>();
+    db.get_note(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_all_notes(app: AppHandle) -> Result<Vec<Note>, String> {
+    let db = app.state::<Database>();
+    db.get_all_notes().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_note(
+    app: AppHandle,
+    id: String,
+    content: Option<String>,
+    pos_x: Option<i32>,
+    pos_y: Option<i32>,
+    width: Option<i32>,
+    height: Option<i32>,
+    opacity: Option<f64>,
+    always_on_top: Option<bool>,
+) -> Result<(), String> {
+    let db = app.state::<Database>();
+    db.update_note(
+        &id,
+        content.as_deref(),
+        pos_x,
+        pos_y,
+        width,
+        height,
+        opacity,
+        always_on_top,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn close_note(app: AppHandle, id: String) -> Result<(), String> {
+    let db = app.state::<Database>();
+    db.close_note(&id).map_err(|e| e.to_string())?;
+
+    // Close the window
+    let label = format!("note-{}", id);
+    if let Some(window) = app.get_webview_window(&label) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_note(app: AppHandle, id: String) -> Result<(), String> {
+    let db = app.state::<Database>();
+    db.delete_note(&id).map_err(|e| e.to_string())?;
+
+    // Close the window
+    let label = format!("note-{}", id);
+    if let Some(window) = app.get_webview_window(&label) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
+    // Note: Window opacity is not directly settable in Tauri 2.x
+    // We handle this via CSS in the frontend
+    // But we save the value to the database
+    let id = window.label().replace("note-", "");
+    let app = window.app_handle();
+    let db = app.state::<Database>();
+    db.update_note(&id, None, None, None, None, None, Some(opacity), None)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_always_on_top(window: Window, on_top: bool) -> Result<(), String> {
+    window.set_always_on_top(on_top).map_err(|e| e.to_string())?;
+
+    let id = window.label().replace("note-", "");
+    let app = window.app_handle();
+    let db = app.state::<Database>();
+    db.update_note(&id, None, None, None, None, None, None, Some(on_top))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_settings(app: AppHandle) -> Result<Settings, String> {
+    let db = app.state::<Database>();
+    db.get_settings().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    let db = app.state::<Database>();
+    db.set_setting("theme", &theme).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_default_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
+    let db = app.state::<Database>();
+    db.set_setting("default_opacity", &opacity.to_string()).map_err(|e| e.to_string())
+}
