@@ -30,6 +30,7 @@ pub fn get_all_notes(app: AppHandle) -> Result<Vec<Note>, String> {
 pub fn update_note(
     app: AppHandle,
     id: String,
+    title: Option<String>,
     content: Option<String>,
     pos_x: Option<i32>,
     pos_y: Option<i32>,
@@ -41,6 +42,7 @@ pub fn update_note(
     let db = app.state::<Database>();
     db.update_note(
         &id,
+        title.as_deref(),
         content.as_deref(),
         pos_x,
         pos_y,
@@ -80,6 +82,24 @@ pub fn delete_note(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
+    let db = app.state::<Database>();
+
+    // Mark as open in database
+    db.open_note(&id).map_err(|e| e.to_string())?;
+
+    // Get the note data
+    let note = db.get_note(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Note not found".to_string())?;
+
+    // Create the window
+    create_note_window(&app, &note)?;
+
+    Ok(note)
+}
+
+#[tauri::command]
 pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
     // Note: Window opacity is not directly settable in Tauri 2.x
     // We handle this via CSS in the frontend
@@ -87,7 +107,7 @@ pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
-    db.update_note(&id, None, None, None, None, None, Some(opacity), None)
+    db.update_note(&id, None, None, None, None, None, None, Some(opacity), None)
         .map_err(|e| e.to_string())
 }
 
@@ -98,7 +118,7 @@ pub fn set_always_on_top(window: Window, on_top: bool) -> Result<(), String> {
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
-    db.update_note(&id, None, None, None, None, None, None, Some(on_top))
+    db.update_note(&id, None, None, None, None, None, None, None, Some(on_top))
         .map_err(|e| e.to_string())
 }
 

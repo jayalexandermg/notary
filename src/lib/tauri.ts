@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export interface Note {
   id: string;
+  title: string;
   content: string;
   pos_x: number;
   pos_y: number;
@@ -22,7 +23,7 @@ export interface Settings {
 }
 
 export async function createNote(posX?: number, posY?: number): Promise<Note> {
-  return invoke('create_note', { posX, posY });
+  return invoke('create_note', { pos_x: posX, pos_y: posY });
 }
 
 export async function getNote(id: string): Promise<Note | null> {
@@ -36,6 +37,7 @@ export async function getAllNotes(): Promise<Note[]> {
 export async function updateNote(
   id: string,
   updates: {
+    title?: string;
     content?: string;
     pos_x?: number;
     pos_y?: number;
@@ -47,13 +49,14 @@ export async function updateNote(
 ): Promise<void> {
   return invoke('update_note', {
     id,
+    title: updates.title,
     content: updates.content,
-    posX: updates.pos_x,
-    posY: updates.pos_y,
+    pos_x: updates.pos_x,
+    pos_y: updates.pos_y,
     width: updates.width,
     height: updates.height,
     opacity: updates.opacity,
-    alwaysOnTop: updates.always_on_top,
+    always_on_top: updates.always_on_top,
   });
 }
 
@@ -65,12 +68,20 @@ export async function deleteNote(id: string): Promise<void> {
   return invoke('delete_note', { id });
 }
 
+export async function openNote(id: string): Promise<Note> {
+  return invoke('open_note', { id });
+}
+
+export async function closeNoteWindow(id: string): Promise<void> {
+  return invoke('close_note', { id });
+}
+
 export async function setOpacity(opacity: number): Promise<void> {
   return invoke('set_opacity', { opacity });
 }
 
 export async function setAlwaysOnTop(onTop: boolean): Promise<void> {
-  return invoke('set_always_on_top', { onTop });
+  return invoke('set_always_on_top', { on_top: onTop });
 }
 
 export async function getSettings(): Promise<Settings> {

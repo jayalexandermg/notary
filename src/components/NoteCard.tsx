@@ -7,7 +7,7 @@ interface NoteCardProps {
 }
 
 export function NoteCard({ noteId }: NoteCardProps) {
-  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop } = useNote(noteId);
+  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, saveNow } = useNote(noteId);
 
   if (loading) {
     return (
@@ -32,8 +32,11 @@ export function NoteCard({ noteId }: NoteCardProps) {
     >
       <TitleBar
         noteId={noteId}
+        title={note.title}
         alwaysOnTop={note.always_on_top}
         onTogglePin={() => updateAlwaysOnTop(!note.always_on_top)}
+        onBeforeClose={saveNow}
+        onTitleChange={updateTitle}
       />
 
       <div className="flex-1 relative">

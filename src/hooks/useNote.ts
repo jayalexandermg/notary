@@ -9,6 +9,7 @@ export function useNote(noteId: string) {
 
   const saveTimeoutRef = useRef<number | null>(null);
   const positionTimeoutRef = useRef<number | null>(null);
+  const pendingContentRef = useRef<string | null>(null);
 
   // Fetch note data
   useEffect(() => {
@@ -29,6 +30,7 @@ export function useNote(noteId: string) {
   const updateContent = useCallback(
     (content: string) => {
       setNote((prev) => (prev ? { ...prev, content } : null));
+      pendingContentRef.current = content;
 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -36,10 +38,23 @@ export function useNote(noteId: string) {
 
       saveTimeoutRef.current = window.setTimeout(() => {
         updateNote(noteId, { content }).catch(console.error);
+        pendingContentRef.current = null;
       }, 300);
     },
     [noteId]
   );
+
+  // Save immediately (flush pending changes)
+  const saveNow = useCallback(async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    if (pendingContentRef.current !== null) {
+      await updateNote(noteId, { content: pendingContentRef.current });
+      pendingContentRef.current = null;
+    }
+  }, [noteId]);
 
   // Update opacity
   const updateOpacity = useCallback(
@@ -57,6 +72,15 @@ export function useNote(noteId: string) {
       const window = getCurrentWindow();
       await window.setAlwaysOnTop(alwaysOnTop);
       await updateNote(noteId, { always_on_top: alwaysOnTop });
+    },
+    [noteId]
+  );
+
+  // Update title
+  const updateTitle = useCallback(
+    async (title: string) => {
+      setNote((prev) => (prev ? { ...prev, title } : null));
+      await updateNote(noteId, { title });
     },
     [noteId]
   );
@@ -110,5 +134,7 @@ export function useNote(noteId: string) {
     updateContent,
     updateOpacity,
     updateAlwaysOnTop,
+    updateTitle,
+    saveNow,
   };
 }

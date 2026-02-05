@@ -10,11 +10,11 @@ static NOTES_VISIBLE: AtomicBool = AtomicBool::new(true);
 pub fn register_hotkeys(app: &AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
 
-    // Ctrl+Shift+N: Create new note
-    let new_note_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyN);
+    // Ctrl+Alt+N: Create new note
+    let new_note_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyN);
 
-    // Ctrl+Shift+H: Hide/show all notes
-    let toggle_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
+    // Ctrl+Alt+H: Hide/show all notes
+    let toggle_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH);
 
     app.global_shortcut().on_shortcut(new_note_shortcut, move |app, _shortcut, _event| {
         let db = app.state::<Database>();

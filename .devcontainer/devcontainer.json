@@ -1,0 +1,34 @@
+{
+  "name": "Notary",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "node",
+  "forwardPorts": [1420, 5173],
+  "postCreateCommand": "corepack prepare pnpm@latest --activate && pnpm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "rust-lang.rust-analyzer",
+        "tauri-apps.tauri-vscode",
+        "fill-labs.dependi"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        }
+      }
+    }
+  },
+  "mounts": [
+    "source=notary-cargo-cache,target=/home/node/.cargo/registry,type=volume"
+  ],
+  "containerEnv": {
+    "CARGO_HOME": "/home/node/.cargo"
+  }
+}
