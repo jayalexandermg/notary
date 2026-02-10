@@ -1,12 +1,12 @@
 [package]
-name = "notary"
+name = "hthud"
 version = "0.1.0"
-description = "A sticky notes desktop application"
+description = "HoverThought HUD - A sticky notes desktop application"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "notary_lib"
+name = "hthud_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

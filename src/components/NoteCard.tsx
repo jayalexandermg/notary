@@ -1,13 +1,14 @@
 import { useNote } from '../hooks/useNote';
 import { TitleBar } from './TitleBar';
 import { TransparencySlider } from './TransparencySlider';
+import { TodoList } from './TodoList';
 
 interface NoteCardProps {
   noteId: string;
 }
 
 export function NoteCard({ noteId }: NoteCardProps) {
-  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, saveNow } = useNote(noteId);
+  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, updateMode, saveNow } = useNote(noteId);
 
   if (loading) {
     return (
@@ -25,6 +26,10 @@ export function NoteCard({ noteId }: NoteCardProps) {
     );
   }
 
+  const toggleMode = () => {
+    updateMode(note.mode === 'todo' ? 'text' : 'todo');
+  };
+
   return (
     <div
       className="note-card h-screen w-screen flex flex-col rounded-lg shadow-note overflow-hidden"
@@ -33,20 +38,26 @@ export function NoteCard({ noteId }: NoteCardProps) {
       <TitleBar
         noteId={noteId}
         title={note.title}
+        mode={note.mode}
         alwaysOnTop={note.always_on_top}
         onTogglePin={() => updateAlwaysOnTop(!note.always_on_top)}
         onBeforeClose={saveNow}
         onTitleChange={updateTitle}
+        onToggleMode={toggleMode}
       />
 
       <div className="flex-1 relative">
-        <textarea
-          className="note-textarea"
-          value={note.content}
-          onChange={(e) => updateContent(e.target.value)}
-          placeholder="Start typing..."
-          autoFocus
-        />
+        {note.mode === 'todo' ? (
+          <TodoList content={note.content} onChange={updateContent} />
+        ) : (
+          <textarea
+            className="note-textarea"
+            value={note.content}
+            onChange={(e) => updateContent(e.target.value)}
+            placeholder="Start typing..."
+            autoFocus
+          />
+        )}
 
         <TransparencySlider opacity={note.opacity} onChange={updateOpacity} />
 

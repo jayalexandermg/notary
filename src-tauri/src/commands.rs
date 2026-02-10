@@ -32,6 +32,7 @@ pub fn update_note(
     id: String,
     title: Option<String>,
     content: Option<String>,
+    mode: Option<String>,
     pos_x: Option<i32>,
     pos_y: Option<i32>,
     width: Option<i32>,
@@ -44,6 +45,7 @@ pub fn update_note(
         &id,
         title.as_deref(),
         content.as_deref(),
+        mode.as_deref(),
         pos_x,
         pos_y,
         width,
@@ -107,7 +109,7 @@ pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
-    db.update_note(&id, None, None, None, None, None, None, Some(opacity), None)
+    db.update_note(&id, None, None, None, None, None, None, None, Some(opacity), None)
         .map_err(|e| e.to_string())
 }
 
@@ -118,7 +120,7 @@ pub fn set_always_on_top(window: Window, on_top: bool) -> Result<(), String> {
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
-    db.update_note(&id, None, None, None, None, None, None, None, Some(on_top))
+    db.update_note(&id, None, None, None, None, None, None, None, None, Some(on_top))
         .map_err(|e| e.to_string())
 }
 

@@ -34,7 +34,7 @@ pub fn run() {
             let notes = db.get_all_notes().unwrap_or_default();
             if notes.is_empty() {
                 if let Ok(note) = db.create_note(100, 100) {
-                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to Notary!\n\nUse + to create notes\nUse the menu to see all notes"), None, None, None, None, None, None);
+                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought HUD!\n\nUse + to create notes\nUse the menu to see all notes"), None, None, None, None, None, None, None);
                     let _ = note_window::create_note_window(&app_handle, &note);
                 }
             }

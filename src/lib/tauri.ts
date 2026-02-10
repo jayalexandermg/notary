@@ -5,6 +5,7 @@ export interface Note {
   id: string;
   title: string;
   content: string;
+  mode: string;
   pos_x: number;
   pos_y: number;
   width: number;
@@ -39,6 +40,7 @@ export async function updateNote(
   updates: {
     title?: string;
     content?: string;
+    mode?: string;
     pos_x?: number;
     pos_y?: number;
     width?: number;
@@ -51,6 +53,7 @@ export async function updateNote(
     id,
     title: updates.title,
     content: updates.content,
+    mode: updates.mode,
     pos_x: updates.pos_x,
     pos_y: updates.pos_y,
     width: updates.width,

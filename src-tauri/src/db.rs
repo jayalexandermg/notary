@@ -10,6 +10,7 @@ pub struct Note {
     pub id: String,
     pub title: String,
     pub content: String,
+    pub mode: String,  // "text" or "todo"
     pub pos_x: i32,
     pub pos_y: i32,
     pub width: i32,
@@ -67,8 +68,9 @@ impl Database {
             [],
         )?;
 
-        // Migration: add title column if it doesn't exist
+        // Migrations
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT ''", []);
+        let _ = conn.execute("ALTER TABLE notes ADD COLUMN mode TEXT NOT NULL DEFAULT 'text'", []);
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
@@ -94,7 +96,7 @@ impl Database {
     pub fn get_all_notes(&self) -> SqlResult<Vec<Note>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, pos_x, pos_y, width, height, opacity,
+            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
              FROM notes ORDER BY created_at"
         )?;
@@ -104,16 +106,17 @@ impl Database {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 content: row.get(2)?,
-                pos_x: row.get(3)?,
-                pos_y: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                opacity: row.get(7)?,
-                is_open: row.get::<_, i32>(8)? == 1,
-                is_minimized: row.get::<_, i32>(9)? == 1,
-                always_on_top: row.get::<_, i32>(10)? == 1,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                mode: row.get(3)?,
+                pos_x: row.get(4)?,
+                pos_y: row.get(5)?,
+                width: row.get(6)?,
+                height: row.get(7)?,
+                opacity: row.get(8)?,
+                is_open: row.get::<_, i32>(9)? == 1,
+                is_minimized: row.get::<_, i32>(10)? == 1,
+                always_on_top: row.get::<_, i32>(11)? == 1,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?.collect::<SqlResult<Vec<_>>>()?;
 
@@ -123,7 +126,7 @@ impl Database {
     pub fn get_open_notes(&self) -> SqlResult<Vec<Note>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, pos_x, pos_y, width, height, opacity,
+            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
              FROM notes WHERE is_open = 1 ORDER BY created_at"
         )?;
@@ -133,16 +136,17 @@ impl Database {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 content: row.get(2)?,
-                pos_x: row.get(3)?,
-                pos_y: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                opacity: row.get(7)?,
-                is_open: row.get::<_, i32>(8)? == 1,
-                is_minimized: row.get::<_, i32>(9)? == 1,
-                always_on_top: row.get::<_, i32>(10)? == 1,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                mode: row.get(3)?,
+                pos_x: row.get(4)?,
+                pos_y: row.get(5)?,
+                width: row.get(6)?,
+                height: row.get(7)?,
+                opacity: row.get(8)?,
+                is_open: row.get::<_, i32>(9)? == 1,
+                is_minimized: row.get::<_, i32>(10)? == 1,
+                always_on_top: row.get::<_, i32>(11)? == 1,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?.collect::<SqlResult<Vec<_>>>()?;
 
@@ -152,7 +156,7 @@ impl Database {
     pub fn get_note(&self, id: &str) -> SqlResult<Option<Note>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, pos_x, pos_y, width, height, opacity,
+            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
              FROM notes WHERE id = ?"
         )?;
@@ -162,16 +166,17 @@ impl Database {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 content: row.get(2)?,
-                pos_x: row.get(3)?,
-                pos_y: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                opacity: row.get(7)?,
-                is_open: row.get::<_, i32>(8)? == 1,
-                is_minimized: row.get::<_, i32>(9)? == 1,
-                always_on_top: row.get::<_, i32>(10)? == 1,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                mode: row.get(3)?,
+                pos_x: row.get(4)?,
+                pos_y: row.get(5)?,
+                width: row.get(6)?,
+                height: row.get(7)?,
+                opacity: row.get(8)?,
+                is_open: row.get::<_, i32>(9)? == 1,
+                is_minimized: row.get::<_, i32>(10)? == 1,
+                always_on_top: row.get::<_, i32>(11)? == 1,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?;
 
@@ -191,9 +196,9 @@ impl Database {
 
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO notes (id, title, content, pos_x, pos_y, width, height, opacity,
+            "INSERT INTO notes (id, title, content, mode, pos_x, pos_y, width, height, opacity,
                                is_open, is_minimized, always_on_top, created_at, updated_at)
-             VALUES (?, '', '', ?, ?, 300, 200, ?, 1, 0, 1, ?, ?)",
+             VALUES (?, '', '', 'text', ?, ?, 300, 200, ?, 1, 0, 1, ?, ?)",
             rusqlite::params![id, pos_x, pos_y, default_opacity, now, now],
         )?;
 
@@ -201,6 +206,7 @@ impl Database {
             id,
             title: String::new(),
             content: String::new(),
+            mode: "text".to_string(),
             pos_x,
             pos_y,
             width: 300,
@@ -214,7 +220,8 @@ impl Database {
         })
     }
 
-    pub fn update_note(&self, id: &str, title: Option<&str>, content: Option<&str>, pos_x: Option<i32>,
+    pub fn update_note(&self, id: &str, title: Option<&str>, content: Option<&str>,
+                       mode: Option<&str>, pos_x: Option<i32>,
                        pos_y: Option<i32>, width: Option<i32>, height: Option<i32>,
                        opacity: Option<f64>, always_on_top: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339();
@@ -231,6 +238,13 @@ impl Database {
             conn.execute(
                 "UPDATE notes SET content = ?, updated_at = ? WHERE id = ?",
                 rusqlite::params![content, now, id],
+            )?;
+        }
+
+        if let Some(mode) = mode {
+            conn.execute(
+                "UPDATE notes SET mode = ?, updated_at = ? WHERE id = ?",
+                rusqlite::params![mode, now, id],
             )?;
         }
 
