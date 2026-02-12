@@ -8,7 +8,7 @@ interface NoteCardProps {
 }
 
 export function NoteCard({ noteId }: NoteCardProps) {
-  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, updateMode, saveNow } = useNote(noteId);
+  const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, updateMode, saveNow, flushAndGetContent } = useNote(noteId);
 
   if (loading) {
     return (
@@ -44,6 +44,7 @@ export function NoteCard({ noteId }: NoteCardProps) {
         onBeforeClose={saveNow}
         onTitleChange={updateTitle}
         onToggleMode={toggleMode}
+        onGetLiveContent={flushAndGetContent}
       />
 
       <div className="flex-1 relative">

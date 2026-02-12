@@ -30,12 +30,21 @@ pub fn run() {
                 eprintln!("Failed to restore notes: {}", e);
             }
 
-            // If no notes exist, create a welcome note
+            // Ensure at least one visible window exists
             let notes = db.get_all_notes().unwrap_or_default();
+            let has_visible_window = app_handle.webview_windows().len() > 0;
+
             if notes.is_empty() {
+                // No notes at all — create a welcome note
                 if let Ok(note) = db.create_note(100, 100) {
                     let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought HUD!\n\nUse + to create notes\nUse the menu to see all notes"), None, None, None, None, None, None, None);
                     let _ = note_window::create_note_window(&app_handle, &note);
+                }
+            } else if !has_visible_window {
+                // Notes exist but none are open — force-open the most recent one
+                if let Some(most_recent) = notes.first() {
+                    let _ = db.open_note(&most_recent.id);
+                    let _ = note_window::create_note_window(&app_handle, most_recent);
                 }
             }
 

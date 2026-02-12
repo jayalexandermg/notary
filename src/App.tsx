@@ -16,7 +16,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/note/:noteId" element={<NotePage />} />
-        <Route path="*" element={<div className="p-4">Notary - Use Ctrl+Shift+N to create a note</div>} />
+        <Route path="*" element={<div className="p-4">HoverThought HUD - Use Ctrl+Alt+N to create a note</div>} />
       </Routes>
     </BrowserRouter>
   );

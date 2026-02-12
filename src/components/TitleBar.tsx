@@ -10,9 +10,10 @@ interface TitleBarProps {
   onBeforeClose?: () => Promise<void>;
   onTitleChange: (title: string) => void;
   onToggleMode: () => void;
+  onGetLiveContent: () => Promise<string>;
 }
 
-export function TitleBar({ noteId, title, mode, alwaysOnTop, onTogglePin, onBeforeClose, onTitleChange, onToggleMode }: TitleBarProps) {
+export function TitleBar({ noteId, title, mode, alwaysOnTop, onTogglePin, onBeforeClose, onTitleChange, onToggleMode, onGetLiveContent }: TitleBarProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -83,13 +84,12 @@ export function TitleBar({ noteId, title, mode, alwaysOnTop, onTogglePin, onBefo
   const handleMergeNote = async (sourceNote: Note) => {
     if (sourceNote.id === noteId) return;
 
-    // Get current note's content and append source note's content
-    const currentNote = notes.find(n => n.id === noteId);
-    if (!currentNote) return;
+    // Flush and get live content to avoid losing unsaved edits
+    const liveContent = await onGetLiveContent();
 
-    const separator = currentNote.content && sourceNote.content ? '\n\n---\n\n' : '';
-    const mergedContent = currentNote.content + separator + sourceNote.content;
-    const mergedTitle = currentNote.title || sourceNote.title || 'Merged Note';
+    const separator = liveContent && sourceNote.content ? '\n\n---\n\n' : '';
+    const mergedContent = liveContent + separator + sourceNote.content;
+    const mergedTitle = title || sourceNote.title || 'Merged Note';
 
     // Update current note with merged content
     await updateNote(noteId, { content: mergedContent, title: mergedTitle });

@@ -8,7 +8,8 @@ export function useNote(noteId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<number | null>(null);
-  const positionTimeoutRef = useRef<number | null>(null);
+  const moveTimeoutRef = useRef<number | null>(null);
+  const resizeTimeoutRef = useRef<number | null>(null);
   const pendingContentRef = useRef<string | null>(null);
 
   // Fetch note data
@@ -102,10 +103,10 @@ export function useNote(noteId: string) {
 
     async function setupListeners() {
       unlistenMove = await window.onMoved(({ payload }) => {
-        if (positionTimeoutRef.current) {
-          clearTimeout(positionTimeoutRef.current);
+        if (moveTimeoutRef.current) {
+          clearTimeout(moveTimeoutRef.current);
         }
-        positionTimeoutRef.current = globalThis.setTimeout(() => {
+        moveTimeoutRef.current = globalThis.setTimeout(() => {
           updateNote(noteId, {
             pos_x: Math.round(payload.x),
             pos_y: Math.round(payload.y),
@@ -114,10 +115,10 @@ export function useNote(noteId: string) {
       });
 
       unlistenResize = await window.onResized(({ payload }) => {
-        if (positionTimeoutRef.current) {
-          clearTimeout(positionTimeoutRef.current);
+        if (resizeTimeoutRef.current) {
+          clearTimeout(resizeTimeoutRef.current);
         }
-        positionTimeoutRef.current = globalThis.setTimeout(() => {
+        resizeTimeoutRef.current = globalThis.setTimeout(() => {
           updateNote(noteId, {
             width: Math.round(payload.width),
             height: Math.round(payload.height),
@@ -132,9 +133,16 @@ export function useNote(noteId: string) {
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (positionTimeoutRef.current) clearTimeout(positionTimeoutRef.current);
+      if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
   }, [noteId]);
+
+  // Flush pending saves and return live content
+  const flushAndGetContent = useCallback(async (): Promise<string> => {
+    await saveNow();
+    return pendingContentRef.current ?? note?.content ?? '';
+  }, [saveNow, note]);
 
   return {
     note,
@@ -146,5 +154,6 @@ export function useNote(noteId: string) {
     updateTitle,
     updateMode,
     saveNow,
+    flushAndGetContent,
   };
 }
