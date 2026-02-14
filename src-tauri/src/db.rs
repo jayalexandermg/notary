@@ -34,6 +34,15 @@ pub struct Database {
 }
 
 impl Database {
+    fn conn(&self) -> SqlResult<std::sync::MutexGuard<'_, Connection>> {
+        self.conn.lock().map_err(|_| {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
+                Some("database lock poisoned".to_string()),
+            )
+        })
+    }
+
     pub fn new(app_data_dir: PathBuf) -> SqlResult<Self> {
         std::fs::create_dir_all(&app_data_dir).ok();
         let db_path = app_data_dir.join("notary.db");
@@ -47,7 +56,7 @@ impl Database {
     }
 
     fn init_tables(&self) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS notes (
@@ -94,7 +103,7 @@ impl Database {
     }
 
     pub fn get_all_notes(&self) -> SqlResult<Vec<Note>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
@@ -124,7 +133,7 @@ impl Database {
     }
 
     pub fn get_open_notes(&self) -> SqlResult<Vec<Note>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
@@ -154,7 +163,7 @@ impl Database {
     }
 
     pub fn get_note(&self, id: &str) -> SqlResult<Option<Note>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
                     is_open, is_minimized, always_on_top, created_at, updated_at
@@ -194,7 +203,7 @@ impl Database {
             .parse::<f64>()
             .unwrap_or(0.95);
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         conn.execute(
             "INSERT INTO notes (id, title, content, mode, pos_x, pos_y, width, height, opacity,
                                is_open, is_minimized, always_on_top, created_at, updated_at)
@@ -225,63 +234,78 @@ impl Database {
                        pos_y: Option<i32>, width: Option<i32>, height: Option<i32>,
                        opacity: Option<f64>, always_on_top: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
 
-        if let Some(title) = title {
-            conn.execute(
-                "UPDATE notes SET title = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![title, now, id],
-            )?;
+        conn.execute_batch("BEGIN")?;
+
+        let result = (|| -> SqlResult<()> {
+            if let Some(title) = title {
+                conn.execute(
+                    "UPDATE notes SET title = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![title, now, id],
+                )?;
+            }
+
+            if let Some(content) = content {
+                conn.execute(
+                    "UPDATE notes SET content = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![content, now, id],
+                )?;
+            }
+
+            if let Some(mode) = mode {
+                conn.execute(
+                    "UPDATE notes SET mode = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![mode, now, id],
+                )?;
+            }
+
+            if let (Some(x), Some(y)) = (pos_x, pos_y) {
+                conn.execute(
+                    "UPDATE notes SET pos_x = ?, pos_y = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![x, y, now, id],
+                )?;
+            }
+
+            if let (Some(w), Some(h)) = (width, height) {
+                conn.execute(
+                    "UPDATE notes SET width = ?, height = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![w, h, now, id],
+                )?;
+            }
+
+            if let Some(opacity) = opacity {
+                conn.execute(
+                    "UPDATE notes SET opacity = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![opacity, now, id],
+                )?;
+            }
+
+            if let Some(on_top) = always_on_top {
+                conn.execute(
+                    "UPDATE notes SET always_on_top = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![on_top as i32, now, id],
+                )?;
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
         }
-
-        if let Some(content) = content {
-            conn.execute(
-                "UPDATE notes SET content = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![content, now, id],
-            )?;
-        }
-
-        if let Some(mode) = mode {
-            conn.execute(
-                "UPDATE notes SET mode = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![mode, now, id],
-            )?;
-        }
-
-        if let (Some(x), Some(y)) = (pos_x, pos_y) {
-            conn.execute(
-                "UPDATE notes SET pos_x = ?, pos_y = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![x, y, now, id],
-            )?;
-        }
-
-        if let (Some(w), Some(h)) = (width, height) {
-            conn.execute(
-                "UPDATE notes SET width = ?, height = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![w, h, now, id],
-            )?;
-        }
-
-        if let Some(opacity) = opacity {
-            conn.execute(
-                "UPDATE notes SET opacity = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![opacity, now, id],
-            )?;
-        }
-
-        if let Some(on_top) = always_on_top {
-            conn.execute(
-                "UPDATE notes SET always_on_top = ?, updated_at = ? WHERE id = ?",
-                rusqlite::params![on_top as i32, now, id],
-            )?;
-        }
-
-        Ok(())
     }
 
     pub fn open_note(&self, id: &str) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         conn.execute(
             "UPDATE notes SET is_open = 1, updated_at = ? WHERE id = ?",
             rusqlite::params![now, id],
@@ -291,7 +315,7 @@ impl Database {
 
     pub fn close_note(&self, id: &str) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         conn.execute(
             "UPDATE notes SET is_open = 0, updated_at = ? WHERE id = ?",
             rusqlite::params![now, id],
@@ -300,13 +324,13 @@ impl Database {
     }
 
     pub fn delete_note(&self, id: &str) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         conn.execute("DELETE FROM notes WHERE id = ?", [id])?;
         Ok(())
     }
 
     pub fn get_setting(&self, key: &str) -> SqlResult<String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         let value: String = conn.query_row(
             "SELECT value FROM settings WHERE key = ?",
             [key],
@@ -316,7 +340,7 @@ impl Database {
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn()?;
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
             [key, value],

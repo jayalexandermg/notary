@@ -37,9 +37,14 @@ export function useNote(noteId: string) {
         clearTimeout(saveTimeoutRef.current);
       }
 
-      saveTimeoutRef.current = window.setTimeout(() => {
-        updateNote(noteId, { content }).catch(console.error);
-        pendingContentRef.current = null;
+      saveTimeoutRef.current = window.setTimeout(async () => {
+        try {
+          await updateNote(noteId, { content });
+          pendingContentRef.current = null;
+        } catch (e) {
+          console.error('Failed to save note:', e);
+          // Leave pendingContentRef set so next edit or flush retries
+        }
       }, 300);
     },
     [noteId]

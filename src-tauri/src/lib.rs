@@ -12,8 +12,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
-            let db = Database::new(app_data_dir).expect("Failed to initialize database");
+            let app_data_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+            let db = Database::new(app_data_dir)
+                .map_err(|e| format!("Failed to initialize database: {e}"))?;
 
             // Store database in app state
             app.manage(db);

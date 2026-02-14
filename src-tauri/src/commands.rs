@@ -40,6 +40,20 @@ pub fn update_note(
     opacity: Option<f64>,
     always_on_top: Option<bool>,
 ) -> Result<(), String> {
+    // Validate mode
+    if let Some(ref m) = mode {
+        if m != "text" && m != "todo" {
+            return Err(format!("Invalid mode: {m}. Must be \"text\" or \"todo\""));
+        }
+    }
+
+    // Clamp opacity
+    let opacity = opacity.map(|o| o.clamp(0.3, 1.0));
+
+    // Clamp dimensions to minimum
+    let width = width.map(|w| w.max(200));
+    let height = height.map(|h| h.max(150));
+
     let db = app.state::<Database>();
     db.update_note(
         &id,
@@ -103,9 +117,7 @@ pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
 
 #[tauri::command]
 pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
-    // Note: Window opacity is not directly settable in Tauri 2.x
-    // We handle this via CSS in the frontend
-    // But we save the value to the database
+    let opacity = opacity.clamp(0.3, 1.0);
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
