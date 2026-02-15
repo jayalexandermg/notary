@@ -1,6 +1,6 @@
 [package]
 name = "hthud"
-version = "0.1.0"
+version = "0.1.1"
 description = "HoverThought HUD - A sticky notes desktop application"
 authors = ["Jay8figures <jay8figures@gmail.com>"]
 edition = "2021"
@@ -20,6 +20,3 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
-
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-global-shortcut = "2"
