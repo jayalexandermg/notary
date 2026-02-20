@@ -91,15 +91,6 @@ export function useNote(noteId: string) {
     [noteId]
   );
 
-  // Update mode
-  const updateMode = useCallback(
-    async (mode: string) => {
-      setNote((prev) => (prev ? { ...prev, mode } : null));
-      await updateNote(noteId, { mode });
-    },
-    [noteId]
-  );
-
   // Listen for window move/resize events
   useEffect(() => {
     const window = getCurrentWindow();
@@ -157,7 +148,6 @@ export function useNote(noteId: string) {
     updateOpacity,
     updateAlwaysOnTop,
     updateTitle,
-    updateMode,
     saveNow,
     flushAndGetContent,
   };

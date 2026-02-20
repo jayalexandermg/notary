@@ -59,42 +59,12 @@ body {
   @apply bg-red-500 text-white;
 }
 
-.note-textarea {
-  background: transparent;
-  color: var(--note-text);
-  resize: none;
-  outline: none;
-  width: 100%;
-  height: 100%;
-  padding: 12px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.note-textarea::placeholder {
+.editor-text::placeholder {
   color: rgba(0, 0, 0, 0.4);
 }
 
-.dark .note-textarea::placeholder {
+.dark .editor-text::placeholder {
   color: rgba(255, 255, 255, 0.4);
-}
-
-/* Scrollbar styling */
-.note-textarea::-webkit-scrollbar {
-  width: 6px;
-}
-
-.note-textarea::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.note-textarea::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.dark .note-textarea::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Transparency slider */
@@ -132,29 +102,35 @@ body {
   @apply text-blue-500;
 }
 
-/* Mode toggle button */
-.mode-active {
-  @apply text-green-600;
-}
-
-/* Todo list */
-.todo-list {
+/* Note editor */
+.note-editor {
   width: 100%;
   height: 100%;
   overflow-y: auto;
   padding: 8px 12px;
 }
 
-.todo-item {
+.editor-line {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 2px 0;
 }
 
-.todo-item.todo-checked .todo-text {
+.editor-line.todo-checked .todo-text {
   text-decoration: line-through;
   opacity: 0.5;
+}
+
+.editor-text {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--note-text);
+  padding: 2px 0;
 }
 
 .todo-checkbox {
@@ -184,20 +160,20 @@ body {
   color: rgba(255, 255, 255, 0.3);
 }
 
-/* Todo list scrollbar */
-.todo-list::-webkit-scrollbar {
+/* Note editor scrollbar */
+.note-editor::-webkit-scrollbar {
   width: 6px;
 }
 
-.todo-list::-webkit-scrollbar-track {
+.note-editor::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.todo-list::-webkit-scrollbar-thumb {
+.note-editor::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 3px;
 }
 
-.dark .todo-list::-webkit-scrollbar-thumb {
+.dark .note-editor::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }

@@ -12,7 +12,7 @@ pub fn create_note_window(app: &AppHandle, note: &Note) -> Result<(), String> {
     let url = WebviewUrl::App(format!("/note/{}", note.id).into());
 
     let builder = WebviewWindowBuilder::new(app, &label, url)
-        .title("Notary")
+        .title("HoverThought HUD")
         .decorations(false)
         .transparent(true)
         .always_on_top(note.always_on_top)

@@ -4,16 +4,14 @@ import { startDragging, createNote, minimizeWindow, closeNoteWindow, deleteNote,
 interface TitleBarProps {
   noteId: string;
   title: string;
-  mode: string;
   alwaysOnTop: boolean;
   onTogglePin: () => void;
   onBeforeClose?: () => Promise<void>;
   onTitleChange: (title: string) => void;
-  onToggleMode: () => void;
   onGetLiveContent: () => Promise<string>;
 }
 
-export function TitleBar({ noteId, title, mode, alwaysOnTop, onTogglePin, onBeforeClose, onTitleChange, onToggleMode, onGetLiveContent }: TitleBarProps) {
+export function TitleBar({ noteId, title, alwaysOnTop, onTogglePin, onBeforeClose, onTitleChange, onGetLiveContent }: TitleBarProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -219,29 +217,6 @@ export function TitleBar({ noteId, title, mode, alwaysOnTop, onTogglePin, onBefo
       </div>
 
       <div className="flex items-center gap-1">
-        <button
-          onClick={onToggleMode}
-          className={`titlebar-button ${mode === 'todo' ? 'mode-active' : ''}`}
-          title={mode === 'todo' ? 'Switch to text mode' : 'Switch to todo mode'}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="5" width="6" height="6" rx="1" />
-            <path d="M13 6h8" />
-            <path d="M13 12h8" />
-            <rect x="3" y="13" width="6" height="6" rx="1" />
-            <path d="M13 18h8" />
-          </svg>
-        </button>
         <button
           onClick={onTogglePin}
           className={`titlebar-button ${alwaysOnTop ? 'pin-active' : ''}`}
