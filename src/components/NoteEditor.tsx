@@ -11,7 +11,6 @@ function parseContent(content: string): EditorLine[] {
   if (!content) return [{ type: 'text', text: '', checked: false, indent: 0 }];
 
   return content.split('\n').map((line) => {
-    // Count indent level: 2 spaces per level
     let indent = 0;
     let stripped = line;
     while (stripped.startsWith('  ')) {
@@ -24,7 +23,6 @@ function parseContent(content: string): EditorLine[] {
     if (stripped.startsWith('- [ ] ')) {
       return { type: 'todo', text: stripped.slice(6), checked: false, indent };
     }
-    // Plain text line (ignore any indent prefix we parsed above)
     return { type: 'text', text: line, checked: false, indent: 0 };
   });
 }
@@ -41,35 +39,50 @@ function serializeLines(lines: EditorLine[]): string {
     .join('\n');
 }
 
-// When a todo's checked state changes, auto-check/uncheck its parent
+// Propagate check state up through all parent levels
 function autoCheckParents(lines: EditorLine[], changedIndex: number): EditorLine[] {
-  const newLines = [...lines];
-  const changedLine = newLines[changedIndex];
+  let newLines = [...lines];
+  let currentIndex = changedIndex;
 
-  if (changedLine.type !== 'todo' || changedLine.indent === 0) return newLines;
+  while (currentIndex >= 0) {
+    const currentLine = newLines[currentIndex];
+    if (currentLine.type !== 'todo' || currentLine.indent === 0) break;
 
-  // Find nearest parent (closest previous todo with lower indent)
-  for (let i = changedIndex - 1; i >= 0; i--) {
-    const parent = newLines[i];
-    if (parent.type !== 'todo') break;
-    if (parent.indent < changedLine.indent) {
-      const childIndent = parent.indent + 1;
-      let allChecked = true;
-      let hasChildren = false;
-      for (let j = i + 1; j < newLines.length; j++) {
-        const child = newLines[j];
-        if (child.type !== 'todo' || child.indent < childIndent) break;
-        if (child.indent === childIndent) {
-          hasChildren = true;
-          if (!child.checked) allChecked = false;
+    // Find nearest parent (closest previous todo with lower indent)
+    let parentIndex = -1;
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      const candidate = newLines[i];
+      if (candidate.type !== 'todo') break;
+      if (candidate.indent < currentLine.indent) {
+        parentIndex = i;
+        break;
+      }
+    }
+    if (parentIndex === -1) break;
+
+    const parent = newLines[parentIndex];
+    const childIndent = parent.indent + 1;
+    let allChecked = true;
+    let hasChildren = false;
+
+    for (let j = parentIndex + 1; j < newLines.length; j++) {
+      const child = newLines[j];
+      if (child.type !== 'todo' || child.indent < childIndent) break;
+      if (child.indent === childIndent) {
+        hasChildren = true;
+        if (!child.checked) {
+          allChecked = false;
+          break;
         }
       }
-      if (hasChildren) {
-        newLines[i] = { ...parent, checked: allChecked };
-      }
-      break;
     }
+
+    if (hasChildren) {
+      newLines[parentIndex] = { ...parent, checked: allChecked };
+    }
+    currentIndex = parentIndex;
   }
+
   return newLines;
 }
 
@@ -84,7 +97,6 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
   const focusIndexRef = useRef<number | null>(null);
   const isInternalChange = useRef(false);
 
-  // Sync from external content changes (load, merge)
   useEffect(() => {
     if (!isInternalChange.current) {
       setLines(parseContent(content));
@@ -102,7 +114,6 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
     });
   });
 
-  // Focus management after renders
   useEffect(() => {
     if (focusIndexRef.current !== null) {
       const idx = focusIndexRef.current;
@@ -129,8 +140,6 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
   const updateText = (index: number, text: string) => {
     const newLines = [...lines];
     const line = newLines[index];
-
-    // Auto-detect todo syntax typed into a plain text line
     if (line.type === 'text' && text.startsWith('- [x] ')) {
       newLines[index] = { type: 'todo', text: text.slice(6), checked: true, indent: 0 };
     } else if (line.type === 'text' && text.startsWith('- [ ] ')) {
@@ -147,7 +156,6 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
     if (e.key === 'Enter') {
       e.preventDefault();
       const newLines = [...lines];
-      // Enter on todo → new todo at same indent; on text → new text line
       const newLine: EditorLine =
         line.type === 'todo'
           ? { type: 'todo', text: '', checked: false, indent: line.indent }
@@ -155,12 +163,24 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
       newLines.splice(index + 1, 0, newLine);
       focusIndexRef.current = index + 1;
       commitChanges(newLines);
+
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const newLines = [...lines];
-      if (e.shiftKey) {
+
+      if (e.ctrlKey) {
+        // Ctrl+Tab: convert text → todo, or increase todo indent
+        const newLines = [...lines];
+        if (line.type === 'text') {
+          newLines[index] = { type: 'todo', text: line.text, checked: false, indent: 0 };
+        } else {
+          newLines[index] = { ...line, indent: Math.min(line.indent + 1, 3) };
+        }
+        commitChanges(newLines);
+
+      } else if (e.shiftKey) {
         // Shift+Tab: decrease indent or convert todo → text
         if (line.type === 'todo') {
+          const newLines = [...lines];
           if (line.indent === 0) {
             newLines[index] = { type: 'text', text: line.text, checked: false, indent: 0 };
           } else {
@@ -168,24 +188,43 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
           }
           commitChanges(newLines);
         }
+
       } else {
-        // Tab on text → convert to todo; Tab on todo → increase indent
-        if (line.type === 'text') {
-          newLines[index] = { type: 'todo', text: line.text, checked: false, indent: 0 };
-        } else {
+        // Regular Tab:
+        // - todo line: increase indent level
+        // - text line: insert 2 spaces at cursor
+        if (line.type === 'todo') {
+          const newLines = [...lines];
           newLines[index] = { ...line, indent: Math.min(line.indent + 1, 3) };
+          commitChanges(newLines);
+        } else {
+          const el = textareaRefs.current[index];
+          if (el) {
+            const start = el.selectionStart ?? line.text.length;
+            const end = el.selectionEnd ?? line.text.length;
+            const newText = line.text.substring(0, start) + '  ' + line.text.substring(end);
+            const newLines = [...lines];
+            newLines[index] = { ...line, text: newText };
+            isInternalChange.current = true;
+            setLines(newLines);
+            onChange(serializeLines(newLines));
+            requestAnimationFrame(() => {
+              if (el) {
+                el.selectionStart = start + 2;
+                el.selectionEnd = start + 2;
+              }
+            });
+          }
         }
-        commitChanges(newLines);
       }
+
     } else if (e.key === 'Backspace' && line.text === '') {
       if (line.type === 'todo') {
         e.preventDefault();
         const newLines = [...lines];
         if (line.indent > 0) {
-          // De-indent first
           newLines[index] = { ...line, indent: line.indent - 1 };
         } else {
-          // Convert empty todo back to text
           newLines[index] = { type: 'text', text: '', checked: false, indent: 0 };
         }
         focusIndexRef.current = index;
@@ -197,6 +236,7 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
         focusIndexRef.current = Math.max(0, index - 1);
         commitChanges(newLines);
       }
+
     } else if (e.key === 'ArrowUp' && index > 0) {
       e.preventDefault();
       textareaRefs.current[index - 1]?.focus();
@@ -223,9 +263,7 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
             />
           )}
           <textarea
-            ref={(el) => {
-              textareaRefs.current[index] = el;
-            }}
+            ref={(el) => { textareaRefs.current[index] = el; }}
             value={line.text}
             onChange={(e) => updateText(index, e.target.value)}
             onKeyDown={(e) => handleKeyDown(index, e)}
@@ -234,7 +272,7 @@ export function NoteEditor({ content, onChange }: NoteEditorProps) {
               line.type === 'todo'
                 ? 'New item...'
                 : index === 0
-                  ? 'Start typing... (Tab → todo)'
+                  ? 'Start typing... (Ctrl+Tab for todo)'
                   : ''
             }
             rows={1}

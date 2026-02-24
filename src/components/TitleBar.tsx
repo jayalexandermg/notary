@@ -11,14 +11,16 @@ interface TitleBarProps {
   onBeforeClose?: () => Promise<void>;
   onTitleChange: (title: string) => void;
   onGetLiveContent: () => Promise<string>;
+  onAddTodo: () => void;
 }
 
-export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onOpacityChange, onBeforeClose, onTitleChange, onGetLiveContent }: TitleBarProps) {
+export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onOpacityChange, onBeforeClose, onTitleChange, onGetLiveContent, onAddTodo }: TitleBarProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
+  const [isSynced, setIsSynced] = useState(false);
 
   useEffect(() => {
     if (showMenu) {
@@ -30,10 +32,8 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
     setEditTitle(title);
   }, [title]);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     if (!showMenu && !showSettings) return;
-
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.menu-dropdown') && !target.closest('.menu-trigger') &&
@@ -42,7 +42,6 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
         setShowSettings(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showMenu, showSettings]);
@@ -61,14 +60,10 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
     await createNote();
   };
 
-  const handleMinimize = async () => {
-    await minimizeWindow();
-  };
+  const handleMinimize = async () => await minimizeWindow();
 
   const handleClose = async () => {
-    if (onBeforeClose) {
-      await onBeforeClose();
-    }
+    if (onBeforeClose) await onBeforeClose();
     await closeNoteWindow(noteId);
   };
 
@@ -80,22 +75,17 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
 
   const handleOpenNote = async (id: string) => {
     setShowMenu(false);
-    if (id !== noteId) {
-      await openNote(id);
-    }
+    if (id !== noteId) await openNote(id);
   };
 
   const handleMergeNote = async (sourceNote: Note) => {
     if (sourceNote.id === noteId) return;
-
     const liveContent = await onGetLiveContent();
     const separator = liveContent && sourceNote.content ? '\n\n---\n\n' : '';
     const mergedContent = liveContent + separator + sourceNote.content;
     const mergedTitle = title || sourceNote.title || 'Merged Note';
-
     await updateNote(noteId, { content: mergedContent, title: mergedTitle });
     await deleteNote(sourceNote.id);
-
     const updatedNotes = await getAllNotes();
     setNotes(updatedNotes);
     setShowMenu(false);
@@ -104,27 +94,33 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
-    if (editTitle !== title) {
-      onTitleChange(editTitle);
+    if (editTitle !== title) onTitleChange(editTitle);
+  };
+
+  // Opacity: if synced, broadcast to all notes; else update just this one
+  const handleOpacityChange = (newOpacity: number) => {
+    onOpacityChange(newOpacity);
+    if (isSynced) {
+      setAllOpacity(newOpacity).catch(console.error);
     }
   };
 
-  const handleMinimizeAll = async () => {
-    setShowSettings(false);
-    await minimizeAllNotes();
+  const handleSyncToggle = async () => {
+    if (isSynced) {
+      setIsSynced(false);
+    } else {
+      setIsSynced(true);
+      await setAllOpacity(opacity); // immediately sync all to current note's opacity
+    }
   };
 
-  const handleShowAll = async () => {
-    setShowSettings(false);
-    await showAllNotes();
-  };
+  const handleMinimizeAll = async () => { setShowSettings(false); await minimizeAllNotes(); };
+  const handleShowAll = async () => { setShowSettings(false); await showAllNotes(); };
 
-  const handleSyncOpacity = async () => {
+  const handleAddTodo = () => {
     setShowSettings(false);
-    await setAllOpacity(opacity);
+    onAddTodo();
   };
-
-  const displayTitle = title || 'Untitled';
 
   return (
     <div
@@ -207,7 +203,7 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
             className="note-title flex-1 min-w-0 truncate text-xs opacity-70 hover:opacity-100 cursor-text"
             title="Click to edit title"
           >
-            {displayTitle}
+            {title || 'Untitled'}
           </span>
         )}
       </div>
@@ -231,9 +227,7 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
           title="Delete note permanently"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 6h18" />
-            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
           </svg>
         </button>
 
@@ -251,9 +245,12 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
           </button>
 
           {showSettings && (
-            <div className="settings-dropdown absolute top-full right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg w-52 z-50 p-3">
+            <div
+              className="settings-dropdown absolute top-full right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg w-52 z-50 p-3 overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 48px)' }}
+            >
               {/* Opacity slider */}
-              <div className="mb-3">
+              <div className="mb-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-gray-600 dark:text-gray-400">Opacity</span>
                   <span className="text-xs text-gray-500">{Math.round(opacity * 100)}%</span>
@@ -264,15 +261,42 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
                   max="1"
                   step="0.05"
                   value={opacity}
-                  onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
+                  onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
                   className="w-full h-1 bg-gray-300 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
 
               <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
 
-              {/* Universal mode */}
+              {/* Todo */}
+              <button
+                onClick={handleAddTodo}
+                className="w-full px-2 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2 mb-1"
+              >
+                <span>☐</span> Add Todo Item
+              </button>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
+
+              {/* All Notes section */}
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">All Notes</p>
+
+              {/* Sync Opacity toggle */}
+              <button
+                onClick={handleSyncToggle}
+                className={`w-full px-2 py-1.5 text-left text-xs rounded flex items-center gap-2 mb-1 transition-colors ${
+                  isSynced
+                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  {isSynced && <path d="M9 12l2 2 4-4" />}
+                </svg>
+                {isSynced ? 'Opacity Synced — Unsync' : 'Sync opacity to all'}
+              </button>
+
               <button
                 onClick={handleMinimizeAll}
                 className="w-full px-2 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
@@ -286,13 +310,6 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 11 12 6 7 11" /><polyline points="17 18 12 13 7 18" /></svg>
                 Show all
-              </button>
-              <button
-                onClick={handleSyncOpacity}
-                className="w-full px-2 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                Sync opacity to all
               </button>
             </div>
           )}

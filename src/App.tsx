@@ -1,24 +1,20 @@
-import { HashRouter, Routes, Route, useParams } from 'react-router-dom';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { NoteCard } from './components/NoteCard';
 
-function NotePage() {
-  const { noteId } = useParams<{ noteId: string }>();
-
-  if (!noteId) {
-    return <div>Invalid note ID</div>;
-  }
-
-  return <NoteCard noteId={noteId} />;
-}
+// No URL routing — identify what to render from the window label.
+// Note windows are created with label "note-{uuid}".
+const windowLabel = getCurrentWindow().label;
 
 function App() {
+  if (windowLabel.startsWith('note-')) {
+    const noteId = windowLabel.replace('note-', '');
+    return <NoteCard noteId={noteId} />;
+  }
+
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/note/:noteId" element={<NotePage />} />
-        <Route path="*" element={<div className="p-4">HoverThought HUD - Use Ctrl+Alt+N to create a note</div>} />
-      </Routes>
-    </HashRouter>
+    <div className="p-4 text-sm opacity-50">
+      HoverThought HUD — press Ctrl+Alt+N to create a note
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "hthud"
-version = "0.1.3"
+version = "0.1.4"
 description = "HoverThought HUD - A sticky notes desktop application"
 authors = ["Jay8figures <jay8figures@gmail.com>"]
 edition = "2021"

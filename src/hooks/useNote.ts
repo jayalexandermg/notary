@@ -73,11 +73,13 @@ export function useNote(noteId: string) {
     [noteId]
   );
 
-  // Update always on top (uses Rust command which is more reliable on Windows)
+  // Update always on top — call both JS and Rust API for cross-platform reliability
   const updateAlwaysOnTop = useCallback(
     async (alwaysOnTop: boolean) => {
       setNote((prev) => (prev ? { ...prev, always_on_top: alwaysOnTop } : null));
-      await invoke('set_always_on_top', { on_top: alwaysOnTop });
+      const win = getCurrentWindow();
+      await win.setAlwaysOnTop(alwaysOnTop);          // JS API (immediate)
+      await invoke('set_always_on_top', { on_top: alwaysOnTop }); // Rust API + DB save
     },
     []
   );

@@ -9,7 +9,7 @@ pub fn create_note_window(app: &AppHandle, note: &Note) -> Result<(), String> {
         return Ok(());
     }
 
-    let url = WebviewUrl::App(format!("/#/note/{}", note.id).into());
+    let url = WebviewUrl::App("index.html".into());
 
     let builder = WebviewWindowBuilder::new(app, &label, url)
         .title("HoverThought HUD")

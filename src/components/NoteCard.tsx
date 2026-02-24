@@ -1,5 +1,7 @@
+import { useCallback } from 'react';
 import { useNote } from '../hooks/useNote';
 import { TitleBar } from './TitleBar';
+import { TransparencySlider } from './TransparencySlider';
 import { NoteEditor } from './NoteEditor';
 
 interface NoteCardProps {
@@ -8,6 +10,13 @@ interface NoteCardProps {
 
 export function NoteCard({ noteId }: NoteCardProps) {
   const { note, loading, error, updateContent, updateOpacity, updateAlwaysOnTop, updateTitle, saveNow, flushAndGetContent } = useNote(noteId);
+
+  // Appends a new todo line to the note content
+  const addTodoLine = useCallback(() => {
+    if (!note) return;
+    const newContent = note.content ? note.content + '\n- [ ] ' : '- [ ] ';
+    updateContent(newContent);
+  }, [note, updateContent]);
 
   if (loading) {
     return (
@@ -40,12 +49,13 @@ export function NoteCard({ noteId }: NoteCardProps) {
         onBeforeClose={saveNow}
         onTitleChange={updateTitle}
         onGetLiveContent={flushAndGetContent}
+        onAddTodo={addTodoLine}
       />
 
       <div className="flex-1 relative overflow-hidden">
         <NoteEditor content={note.content} onChange={updateContent} />
 
-        {/* Resize handle indicator */}
+        {/* Resize handle */}
         <div className="resize-handle">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="18" cy="18" r="2" />
@@ -54,6 +64,9 @@ export function NoteCard({ noteId }: NoteCardProps) {
           </svg>
         </div>
       </div>
+
+      {/* Opacity slider — always visible at the bottom */}
+      <TransparencySlider opacity={note.opacity} onChange={updateOpacity} />
     </div>
   );
 }
