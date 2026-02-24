@@ -110,3 +110,15 @@ export function minimizeWindow(): Promise<void> {
 export function closeWindow(): Promise<void> {
   return getCurrentWindow().close();
 }
+
+export async function minimizeAllNotes(): Promise<void> {
+  return invoke('minimize_all_notes');
+}
+
+export async function showAllNotes(): Promise<void> {
+  return invoke('show_all_notes');
+}
+
+export async function setAllOpacity(opacity: number): Promise<void> {
+  return invoke('set_all_opacity', { opacity });
+}

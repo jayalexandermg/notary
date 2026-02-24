@@ -65,6 +65,9 @@ pub fn run() {
             commands::get_settings,
             commands::set_theme,
             commands::set_default_opacity,
+            commands::minimize_all_notes,
+            commands::show_all_notes,
+            commands::set_all_opacity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

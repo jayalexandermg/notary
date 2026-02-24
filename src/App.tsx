@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, useParams } from 'react-router-dom';
 import { NoteCard } from './components/NoteCard';
 
 function NotePage() {
@@ -13,12 +13,12 @@ function NotePage() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/note/:noteId" element={<NotePage />} />
         <Route path="*" element={<div className="p-4">HoverThought HUD - Use Ctrl+Alt+N to create a note</div>} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

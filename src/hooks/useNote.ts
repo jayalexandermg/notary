@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import { getNote, updateNote, Note } from '../lib/tauri';
 
 export function useNote(noteId: string) {
@@ -71,15 +73,13 @@ export function useNote(noteId: string) {
     [noteId]
   );
 
-  // Update always on top
+  // Update always on top (uses Rust command which is more reliable on Windows)
   const updateAlwaysOnTop = useCallback(
     async (alwaysOnTop: boolean) => {
       setNote((prev) => (prev ? { ...prev, always_on_top: alwaysOnTop } : null));
-      const window = getCurrentWindow();
-      await window.setAlwaysOnTop(alwaysOnTop);
-      await updateNote(noteId, { always_on_top: alwaysOnTop });
+      await invoke('set_always_on_top', { on_top: alwaysOnTop });
     },
-    [noteId]
+    []
   );
 
   // Update title
@@ -133,6 +133,19 @@ export function useNote(noteId: string) {
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
   }, [noteId]);
+
+  // Listen for global opacity-updated events (from set_all_opacity command)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<number>('opacity-updated', (event) => {
+      setNote((prev) => (prev ? { ...prev, opacity: event.payload } : null));
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   // Flush pending saves and return live content
   const flushAndGetContent = useCallback(async (): Promise<string> => {

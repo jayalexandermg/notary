@@ -1,6 +1,5 @@
 import { useNote } from '../hooks/useNote';
 import { TitleBar } from './TitleBar';
-import { TransparencySlider } from './TransparencySlider';
 import { NoteEditor } from './NoteEditor';
 
 interface NoteCardProps {
@@ -35,26 +34,20 @@ export function NoteCard({ noteId }: NoteCardProps) {
         noteId={noteId}
         title={note.title}
         alwaysOnTop={note.always_on_top}
+        opacity={note.opacity}
         onTogglePin={() => updateAlwaysOnTop(!note.always_on_top)}
+        onOpacityChange={updateOpacity}
         onBeforeClose={saveNow}
         onTitleChange={updateTitle}
         onGetLiveContent={flushAndGetContent}
       />
 
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         <NoteEditor content={note.content} onChange={updateContent} />
-
-        <TransparencySlider opacity={note.opacity} onChange={updateOpacity} />
 
         {/* Resize handle indicator */}
         <div className="resize-handle">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="18" cy="18" r="2" />
             <circle cx="12" cy="18" r="2" />
             <circle cx="18" cy="12" r="2" />

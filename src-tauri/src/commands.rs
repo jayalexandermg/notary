@@ -153,3 +153,40 @@ pub fn set_default_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
     let db = app.state::<Database>();
     db.set_setting("default_opacity", &opacity.to_string()).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn minimize_all_notes(app: AppHandle) -> Result<(), String> {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("note-") {
+            window.minimize().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn show_all_notes(app: AppHandle) -> Result<(), String> {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("note-") {
+            window.unminimize().map_err(|e| e.to_string())?;
+            window.show().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_all_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
+    let opacity = opacity.clamp(0.3, 1.0);
+    let db = app.state::<Database>();
+    let notes = db.get_all_notes().map_err(|e| e.to_string())?;
+    for note in &notes {
+        db.update_note(&note.id, None, None, None, None, None, None, None, Some(opacity), None)
+            .map_err(|e| e.to_string())?;
+        let label = format!("note-{}", note.id);
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.emit("opacity-updated", opacity);
+        }
+    }
+    Ok(())
+}
