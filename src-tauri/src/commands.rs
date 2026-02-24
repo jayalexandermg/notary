@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, Window};
+use tauri::{AppHandle, Emitter, Manager, Window};
 use crate::db::{Database, Note, Settings};
 use crate::note_window::create_note_window;
 
