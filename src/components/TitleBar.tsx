@@ -6,21 +6,22 @@ interface TitleBarProps {
   title: string;
   alwaysOnTop: boolean;
   opacity: number;
+  isSynced: boolean;
   onTogglePin: () => void;
   onOpacityChange: (opacity: number) => void;
+  onSyncToggle: (synced: boolean) => void;
   onBeforeClose?: () => Promise<void>;
   onTitleChange: (title: string) => void;
   onGetLiveContent: () => Promise<string>;
   onAddTodo: () => void;
 }
 
-export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onOpacityChange, onBeforeClose, onTitleChange, onGetLiveContent, onAddTodo }: TitleBarProps) {
+export function TitleBar({ noteId, title, alwaysOnTop, opacity, isSynced, onTogglePin, onOpacityChange, onSyncToggle, onBeforeClose, onTitleChange, onGetLiveContent, onAddTodo }: TitleBarProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
-  const [isSynced, setIsSynced] = useState(false);
 
   useEffect(() => {
     if (showMenu) {
@@ -97,19 +98,11 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
     if (editTitle !== title) onTitleChange(editTitle);
   };
 
-  // Opacity: if synced, broadcast to all notes; else update just this one
-  const handleOpacityChange = (newOpacity: number) => {
-    onOpacityChange(newOpacity);
-    if (isSynced) {
-      setAllOpacity(newOpacity).catch(console.error);
-    }
-  };
-
   const handleSyncToggle = async () => {
     if (isSynced) {
-      setIsSynced(false);
+      onSyncToggle(false);
     } else {
-      setIsSynced(true);
+      onSyncToggle(true);
       await setAllOpacity(opacity); // immediately sync all to current note's opacity
     }
   };
@@ -257,11 +250,11 @@ export function TitleBar({ noteId, title, alwaysOnTop, opacity, onTogglePin, onO
                 </div>
                 <input
                   type="range"
-                  min="0.3"
+                  min="0.1"
                   max="1"
                   step="0.05"
                   value={opacity}
-                  onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+                  onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
                   className="w-full h-1 bg-gray-300 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
                 />
               </div>

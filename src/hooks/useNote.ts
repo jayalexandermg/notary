@@ -84,11 +84,13 @@ export function useNote(noteId: string) {
     []
   );
 
-  // Update title
+  // Update title (also updates the OS window title for the taskbar)
   const updateTitle = useCallback(
     async (title: string) => {
       setNote((prev) => (prev ? { ...prev, title } : null));
       await updateNote(noteId, { title });
+      const win = getCurrentWindow();
+      await win.setTitle(title || 'HoverThought');
     },
     [noteId]
   );

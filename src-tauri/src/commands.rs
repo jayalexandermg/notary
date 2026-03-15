@@ -48,7 +48,7 @@ pub fn update_note(
     }
 
     // Clamp opacity
-    let opacity = opacity.map(|o| o.clamp(0.3, 1.0));
+    let opacity = opacity.map(|o| o.clamp(0.1, 1.0));
 
     // Clamp dimensions to minimum
     let width = width.map(|w| w.max(200));
@@ -117,7 +117,7 @@ pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
 
 #[tauri::command]
 pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
-    let opacity = opacity.clamp(0.3, 1.0);
+    let opacity = opacity.clamp(0.1, 1.0);
     let id = window.label().replace("note-", "");
     let app = window.app_handle();
     let db = app.state::<Database>();
@@ -177,7 +177,7 @@ pub fn show_all_notes(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn set_all_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
-    let opacity = opacity.clamp(0.3, 1.0);
+    let opacity = opacity.clamp(0.1, 1.0);
     let db = app.state::<Database>();
     let notes = db.get_all_notes().map_err(|e| e.to_string())?;
     for note in &notes {

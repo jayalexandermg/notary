@@ -8,7 +8,7 @@ export function TransparencySlider({ opacity, onChange }: TransparencySliderProp
     <div className="opacity-slider">
       <input
         type="range"
-        min="0.3"
+        min="0.1"
         max="1"
         step="0.05"
         value={opacity}
