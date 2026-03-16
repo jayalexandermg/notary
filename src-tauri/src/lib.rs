@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod hotkeys;
 mod note_window;
+mod tray;
 
 use tauri::Manager;
 
@@ -24,6 +25,11 @@ pub fn run() {
             let app_handle = app.handle().clone();
             if let Err(e) = hotkeys::register_hotkeys(&app_handle) {
                 eprintln!("Failed to register hotkeys: {}", e);
+            }
+
+            // Set up system tray
+            if let Err(e) = tray::setup_tray(app.handle()) {
+                eprintln!("Failed to setup system tray: {}", e);
             }
 
             // Restore open notes
