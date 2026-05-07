@@ -4,7 +4,7 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use crate::db::Database;
-use crate::note_window::create_note_window;
+use crate::note_window::spawn_note_window;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
@@ -30,7 +30,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 "new_note" => {
                     let db = app.state::<Database>();
                     if let Ok(note) = db.create_note(100, 100) {
-                        let _ = create_note_window(app, &note);
+                        spawn_note_window(app, note);
                     }
                 }
                 "show_all" => {
