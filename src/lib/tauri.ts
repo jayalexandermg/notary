@@ -24,7 +24,7 @@ export interface Settings {
 }
 
 export async function createNote(posX?: number, posY?: number): Promise<Note> {
-  return invoke('create_note', { pos_x: posX, pos_y: posY });
+  return invoke('create_note', { posX, posY });
 }
 
 export async function getNote(id: string): Promise<Note | null> {
@@ -54,12 +54,12 @@ export async function updateNote(
     title: updates.title,
     content: updates.content,
     mode: updates.mode,
-    pos_x: updates.pos_x,
-    pos_y: updates.pos_y,
+    posX: updates.pos_x,
+    posY: updates.pos_y,
     width: updates.width,
     height: updates.height,
     opacity: updates.opacity,
-    always_on_top: updates.always_on_top,
+    alwaysOnTop: updates.always_on_top,
   });
 }
 
@@ -84,7 +84,7 @@ export async function setOpacity(opacity: number): Promise<void> {
 }
 
 export async function setAlwaysOnTop(onTop: boolean): Promise<void> {
-  return invoke('set_always_on_top', { on_top: onTop });
+  return invoke('set_always_on_top', { onTop });
 }
 
 export async function getSettings(): Promise<Settings> {

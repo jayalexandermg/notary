@@ -79,7 +79,7 @@ export function useNote(noteId: string) {
       setNote((prev) => (prev ? { ...prev, always_on_top: alwaysOnTop } : null));
       const win = getCurrentWindow();
       await win.setAlwaysOnTop(alwaysOnTop);          // JS API (immediate)
-      await invoke('set_always_on_top', { on_top: alwaysOnTop }); // Rust API + DB save
+      await invoke('set_always_on_top', { onTop: alwaysOnTop }); // Rust API + DB save
     },
     []
   );
