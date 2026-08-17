@@ -45,7 +45,7 @@ pub fn run() {
             if notes.is_empty() {
                 // No notes at all — create a welcome note
                 if let Ok(note) = db.create_note(100, 100) {
-                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought HUD!\n\nUse + to create notes\nUse the menu to see all notes"), None, None, None, None, None, None, None);
+                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought - Capture!\n\nUse + to create notes\nTab then Enter starts a to-do\nUse the gear menu for color, opacity and keyboard shortcuts"), None, None, None, None, None, None, None, None, None);
                     let _ = note_window::create_note_window(&app_handle, &note);
                 }
             } else if !has_visible_window {
@@ -74,6 +74,12 @@ pub fn run() {
             commands::minimize_all_notes,
             commands::show_all_notes,
             commands::set_all_opacity,
+            commands::set_all_color,
+            commands::set_all_always_on_top,
+            commands::set_all_size,
+            commands::get_setting,
+            commands::set_setting,
+            commands::set_global_hotkeys,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

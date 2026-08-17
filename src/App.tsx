@@ -35,7 +35,7 @@ function App() {
 
   return (
     <div className="p-4 text-sm opacity-50">
-      HoverThought HUD — press Ctrl+Alt+N to create a note
+      HoverThought - Capture — press Ctrl+Alt+N to create a note
     </div>
   );
 }

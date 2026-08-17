@@ -6,6 +6,8 @@ export interface Note {
   title: string;
   content: string;
   mode: string;
+  color: string;
+  auto_stamp: boolean;
   pos_x: number;
   pos_y: number;
   width: number;
@@ -41,6 +43,8 @@ export async function updateNote(
     title?: string;
     content?: string;
     mode?: string;
+    color?: string;
+    auto_stamp?: boolean;
     pos_x?: number;
     pos_y?: number;
     width?: number;
@@ -54,6 +58,8 @@ export async function updateNote(
     title: updates.title,
     content: updates.content,
     mode: updates.mode,
+    color: updates.color,
+    auto_stamp: updates.auto_stamp,
     pos_x: updates.pos_x,
     pos_y: updates.pos_y,
     width: updates.width,
@@ -111,6 +117,8 @@ export function closeWindow(): Promise<void> {
   return getCurrentWindow().close();
 }
 
+/* --- universal mode: act on every note at once --------------------------- */
+
 export async function minimizeAllNotes(): Promise<void> {
   return invoke('minimize_all_notes');
 }
@@ -121,4 +129,30 @@ export async function showAllNotes(): Promise<void> {
 
 export async function setAllOpacity(opacity: number): Promise<void> {
   return invoke('set_all_opacity', { opacity });
+}
+
+export async function setAllColor(color: string): Promise<void> {
+  return invoke('set_all_color', { color });
+}
+
+export async function setAllAlwaysOnTop(onTop: boolean): Promise<void> {
+  return invoke('set_all_always_on_top', { on_top: onTop });
+}
+
+export async function setAllSize(width: number, height: number): Promise<void> {
+  return invoke('set_all_size', { width, height });
+}
+
+/* --- shared key/value settings ------------------------------------------ */
+
+export async function getSetting(key: string): Promise<string | null> {
+  return invoke('get_setting', { key });
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  return invoke('set_setting', { key, value });
+}
+
+export async function setGlobalHotkeys(newNote: string, toggleAll: string): Promise<void> {
+  return invoke('set_global_hotkeys', { new_note: newNote, toggle_all: toggleAll });
 }

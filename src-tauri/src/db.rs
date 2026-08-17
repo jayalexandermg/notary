@@ -11,6 +11,8 @@ pub struct Note {
     pub title: String,
     pub content: String,
     pub mode: String,  // "text" or "todo"
+    pub color: String,
+    pub auto_stamp: bool,
     pub pos_x: i32,
     pub pos_y: i32,
     pub width: i32,
@@ -80,6 +82,8 @@ impl Database {
         // Migrations
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT ''", []);
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN mode TEXT NOT NULL DEFAULT 'text'", []);
+        let _ = conn.execute("ALTER TABLE notes ADD COLUMN color TEXT NOT NULL DEFAULT 'yellow'", []);
+        let _ = conn.execute("ALTER TABLE notes ADD COLUMN auto_stamp INTEGER NOT NULL DEFAULT 0", []);
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
@@ -102,32 +106,38 @@ impl Database {
         Ok(())
     }
 
+    fn row_to_note(row: &rusqlite::Row) -> SqlResult<Note> {
+        Ok(Note {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            content: row.get(2)?,
+            mode: row.get(3)?,
+            color: row.get(4)?,
+            auto_stamp: row.get::<_, i32>(5)? == 1,
+            pos_x: row.get(6)?,
+            pos_y: row.get(7)?,
+            width: row.get(8)?,
+            height: row.get(9)?,
+            opacity: row.get(10)?,
+            is_open: row.get::<_, i32>(11)? == 1,
+            is_minimized: row.get::<_, i32>(12)? == 1,
+            always_on_top: row.get::<_, i32>(13)? == 1,
+            created_at: row.get(14)?,
+            updated_at: row.get(15)?,
+        })
+    }
+
+    const NOTE_COLUMNS: &'static str =
+        "id, title, content, mode, color, auto_stamp, pos_x, pos_y, width, height, opacity,
+         is_open, is_minimized, always_on_top, created_at, updated_at";
+
     pub fn get_all_notes(&self) -> SqlResult<Vec<Note>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
-                    is_open, is_minimized, always_on_top, created_at, updated_at
-             FROM notes ORDER BY created_at"
+            &format!("SELECT {} FROM notes ORDER BY created_at", Self::NOTE_COLUMNS)
         )?;
 
-        let notes = stmt.query_map([], |row| {
-            Ok(Note {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                mode: row.get(3)?,
-                pos_x: row.get(4)?,
-                pos_y: row.get(5)?,
-                width: row.get(6)?,
-                height: row.get(7)?,
-                opacity: row.get(8)?,
-                is_open: row.get::<_, i32>(9)? == 1,
-                is_minimized: row.get::<_, i32>(10)? == 1,
-                always_on_top: row.get::<_, i32>(11)? == 1,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-            })
-        })?.collect::<SqlResult<Vec<_>>>()?;
+        let notes = stmt.query_map([], Self::row_to_note)?.collect::<SqlResult<Vec<_>>>()?;
 
         Ok(notes)
     }
@@ -135,29 +145,10 @@ impl Database {
     pub fn get_open_notes(&self) -> SqlResult<Vec<Note>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
-                    is_open, is_minimized, always_on_top, created_at, updated_at
-             FROM notes WHERE is_open = 1 ORDER BY created_at"
+            &format!("SELECT {} FROM notes WHERE is_open = 1 ORDER BY created_at", Self::NOTE_COLUMNS)
         )?;
 
-        let notes = stmt.query_map([], |row| {
-            Ok(Note {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                mode: row.get(3)?,
-                pos_x: row.get(4)?,
-                pos_y: row.get(5)?,
-                width: row.get(6)?,
-                height: row.get(7)?,
-                opacity: row.get(8)?,
-                is_open: row.get::<_, i32>(9)? == 1,
-                is_minimized: row.get::<_, i32>(10)? == 1,
-                always_on_top: row.get::<_, i32>(11)? == 1,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-            })
-        })?.collect::<SqlResult<Vec<_>>>()?;
+        let notes = stmt.query_map([], Self::row_to_note)?.collect::<SqlResult<Vec<_>>>()?;
 
         Ok(notes)
     }
@@ -165,29 +156,10 @@ impl Database {
     pub fn get_note(&self, id: &str) -> SqlResult<Option<Note>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, mode, pos_x, pos_y, width, height, opacity,
-                    is_open, is_minimized, always_on_top, created_at, updated_at
-             FROM notes WHERE id = ?"
+            &format!("SELECT {} FROM notes WHERE id = ?", Self::NOTE_COLUMNS)
         )?;
 
-        let mut notes = stmt.query_map([id], |row| {
-            Ok(Note {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                mode: row.get(3)?,
-                pos_x: row.get(4)?,
-                pos_y: row.get(5)?,
-                width: row.get(6)?,
-                height: row.get(7)?,
-                opacity: row.get(8)?,
-                is_open: row.get::<_, i32>(9)? == 1,
-                is_minimized: row.get::<_, i32>(10)? == 1,
-                always_on_top: row.get::<_, i32>(11)? == 1,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-            })
-        })?;
+        let mut notes = stmt.query_map([id], Self::row_to_note)?;
 
         match notes.next() {
             Some(note) => Ok(Some(note?)),
@@ -205,9 +177,9 @@ impl Database {
 
         let conn = self.conn()?;
         conn.execute(
-            "INSERT INTO notes (id, title, content, mode, pos_x, pos_y, width, height, opacity,
+            "INSERT INTO notes (id, title, content, mode, color, auto_stamp, pos_x, pos_y, width, height, opacity,
                                is_open, is_minimized, always_on_top, created_at, updated_at)
-             VALUES (?, '', '', 'text', ?, ?, 300, 200, ?, 1, 0, 1, ?, ?)",
+             VALUES (?, '', '', 'text', 'yellow', 0, ?, ?, 300, 200, ?, 1, 0, 1, ?, ?)",
             rusqlite::params![id, pos_x, pos_y, default_opacity, now, now],
         )?;
 
@@ -216,6 +188,8 @@ impl Database {
             title: String::new(),
             content: String::new(),
             mode: "text".to_string(),
+            color: "yellow".to_string(),
+            auto_stamp: false,
             pos_x,
             pos_y,
             width: 300,
@@ -229,8 +203,10 @@ impl Database {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_note(&self, id: &str, title: Option<&str>, content: Option<&str>,
-                       mode: Option<&str>, pos_x: Option<i32>,
+                       mode: Option<&str>, color: Option<&str>, auto_stamp: Option<bool>,
+                       pos_x: Option<i32>,
                        pos_y: Option<i32>, width: Option<i32>, height: Option<i32>,
                        opacity: Option<f64>, always_on_top: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339();
@@ -257,6 +233,20 @@ impl Database {
                 conn.execute(
                     "UPDATE notes SET mode = ?, updated_at = ? WHERE id = ?",
                     rusqlite::params![mode, now, id],
+                )?;
+            }
+
+            if let Some(color) = color {
+                conn.execute(
+                    "UPDATE notes SET color = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![color, now, id],
+                )?;
+            }
+
+            if let Some(auto_stamp) = auto_stamp {
+                conn.execute(
+                    "UPDATE notes SET auto_stamp = ?, updated_at = ? WHERE id = ?",
+                    rusqlite::params![auto_stamp as i32, now, id],
                 )?;
             }
 
@@ -337,6 +327,17 @@ impl Database {
             |row| row.get(0),
         )?;
         Ok(value)
+    }
+
+    /// Like `get_setting`, but `None` for a key that was never set instead of an error —
+    /// used by the generic get/set settings command for user-configurable values
+    /// (keymap, global hotkeys, universal mode) that may not exist yet.
+    pub fn get_setting_opt(&self, key: &str) -> SqlResult<Option<String>> {
+        match self.get_setting(key) {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> SqlResult<()> {
