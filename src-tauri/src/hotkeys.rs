@@ -24,7 +24,20 @@ fn parse_shortcut(binding: &str) -> Result<Shortcut, String> {
     let mut modifiers = Modifiers::empty();
     for part in mod_parts {
         match *part {
-            "Mod" | "CmdOrCtrl" | "Ctrl" | "Control" => modifiers |= Modifiers::CONTROL,
+            // "Mod" is the portable modifier the settings UI records: Cmd on
+            // macOS, Ctrl everywhere else. Keep it in step with the frontend's
+            // `isMac` handling in src/lib/keybindings.ts.
+            "Mod" | "CmdOrCtrl" => {
+                #[cfg(target_os = "macos")]
+                {
+                    modifiers |= Modifiers::SUPER;
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    modifiers |= Modifiers::CONTROL;
+                }
+            }
+            "Ctrl" | "Control" => modifiers |= Modifiers::CONTROL,
             "Alt" | "Option" => modifiers |= Modifiers::ALT,
             "Shift" => modifiers |= Modifiers::SHIFT,
             "Meta" | "Super" | "Cmd" | "Win" => modifiers |= Modifiers::SUPER,
@@ -105,4 +118,39 @@ pub fn register_hotkeys(app: &AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_the_shipped_defaults() {
+        parse_shortcut(DEFAULT_NEW_NOTE).expect("default new-note hotkey must parse");
+        parse_shortcut(DEFAULT_TOGGLE_ALL).expect("default toggle-all hotkey must parse");
+    }
+
+    #[test]
+    fn parses_bindings_recorded_by_the_settings_ui() {
+        // The keybinding panel serializes with a portable "Mod" prefix.
+        for binding in ["Mod+Alt+N", "Mod+Shift+H", "Ctrl+Alt+N", "Alt+Shift+3", "Mod+K"] {
+            parse_shortcut(binding).unwrap_or_else(|e| panic!("{binding} should parse: {e}"));
+        }
+    }
+
+    #[test]
+    fn rejects_bindings_it_cannot_honour() {
+        // Rejected up front so a bad rebind reports an error instead of
+        // silently unregistering the working hotkeys.
+        assert!(parse_shortcut("").is_err());
+        assert!(parse_shortcut("Ctrl+Alt+F5").is_err(), "unsupported key must error");
+        assert!(parse_shortcut("Hyper+N").is_err(), "unknown modifier must error");
+    }
+
+    #[test]
+    fn modifiers_are_not_silently_dropped() {
+        let with_alt = parse_shortcut("Ctrl+Alt+N").unwrap();
+        let without_alt = parse_shortcut("Ctrl+N").unwrap();
+        assert_ne!(with_alt, without_alt);
+    }
 }

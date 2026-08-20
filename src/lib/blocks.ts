@@ -75,37 +75,37 @@ export function parseBlocks(content: string): Block[] {
     const indent = Math.min(Math.floor(indentSpaces / 2), MAX_INDENT);
     const body = line.slice(indentSpaces);
 
-    const todo = body.match(/^- \[([ xX])\] ?(.*)$/);
+    const todo = body.match(/^- \[([ xX])\](?: (.*))?$/);
     if (todo) {
       return makeBlock({
         type: 'todo',
         indent,
-        text: todo[2],
+        text: todo[2] ?? '',
         checked: todo[1].toLowerCase() === 'x',
         stamp,
       });
     }
 
-    const toggle = body.match(/^([▾▸]) ?(.*)$/);
+    const toggle = body.match(/^([▾▸])(?: (.*))?$/);
     if (toggle) {
       return makeBlock({
         type: 'toggle',
         indent,
-        text: toggle[2],
+        text: toggle[2] ?? '',
         collapsed: toggle[1] === TOGGLE_CLOSED,
         stamp,
       });
     }
 
-    const bullet = body.match(/^[-*] ?(.*)$/);
+    const bullet = body.match(/^[-*](?: (.*))?$/);
     if (bullet) {
-      return makeBlock({ type: 'bullet', indent, text: bullet[1], stamp });
+      return makeBlock({ type: 'bullet', indent, text: bullet[1] ?? '', stamp });
     }
 
-    const heading = body.match(/^(#{1,3}) ?(.*)$/);
+    const heading = body.match(/^(#{1,3})(?: (.*))?$/);
     if (heading) {
       const level = heading[1].length as 1 | 2 | 3;
-      return makeBlock({ type: `h${level}` as BlockType, indent, text: heading[2], stamp });
+      return makeBlock({ type: `h${level}` as BlockType, indent, text: heading[2] ?? '', stamp });
     }
 
     return makeBlock({ type: 'text', indent, text: body, stamp });

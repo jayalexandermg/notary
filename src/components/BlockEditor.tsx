@@ -609,6 +609,63 @@ export function BlockEditor({
     focus: ensureFocus,
   };
 
+  /**
+   * Paste as plain text, split across blocks.
+   *
+   * Without this the browser drops the clipboard's HTML straight into the
+   * contentEditable, which `serializeInline` then flattens — so a multi-line
+   * paste collapsed into a single line and pasted markup leaked in as stray
+   * spans. Taking `text/plain` and running it through the block parser means a
+   * pasted list arrives as real todos/bullets.
+   */
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>, index: number) => {
+      const raw = e.clipboardData.getData('text/plain');
+      if (!raw) return; // let the browser deal with images and files
+
+      e.preventDefault();
+
+      const block = blocks[index];
+      const el = elRefs.current[block.id];
+      if (!el) return;
+
+      const offset = caretOffsetIn(el);
+      const cut = plainToMarkdownOffset(block.text, offset);
+      const head = block.text.slice(0, cut);
+      const tail = block.text.slice(cut);
+
+      const incoming = parseBlocks(raw.replace(/\r\n?/g, '\n')).map((b) => ({
+        ...b,
+        indent: Math.min(b.indent + block.indent, MAX_INDENT),
+      }));
+
+      const first = incoming[0];
+      const landing = incoming[incoming.length - 1];
+      // Pasting into an untouched line adopts what was pasted, rather than
+      // leaving an empty block in front of it.
+      const emptyHost = block.text === '' && block.type === 'text';
+      const next = [...blocks];
+
+      if (incoming.length === 1) {
+        next[index] = emptyHost
+          ? { ...block, type: first.type, checked: first.checked, collapsed: first.collapsed, text: first.text }
+          : { ...block, text: head + first.text + tail };
+        const caret = emptyHost ? plainLength(first.text) : plainLength(head + first.text);
+        commit(applyAutoCheck(next), { id: block.id, offset: caret });
+        return;
+      }
+
+      const headBlock = emptyHost
+        ? { ...block, type: first.type, checked: first.checked, collapsed: first.collapsed, indent: first.indent, text: first.text }
+        : { ...block, text: head + first.text };
+      const tailBlock = { ...landing, text: landing.text + tail };
+
+      next.splice(index, 1, headBlock, ...incoming.slice(1, -1), tailBlock);
+      commit(applyAutoCheck(next), { id: tailBlock.id, offset: plainLength(landing.text) });
+    },
+    [blocks, commit]
+  );
+
   /* ------------------------------------------------------------ keyboard */
 
   const indentBlock = useCallback(
@@ -913,6 +970,7 @@ export function BlockEditor({
               spellCheck
               onInput={() => handleInput(block.id)}
               onKeyDown={(e) => handleKeyDown(e, index)}
+              onPaste={(e) => handlePaste(e, index)}
               onKeyUp={() => rememberCaret(block.id)}
               onMouseUp={() => rememberCaret(block.id)}
               onBlur={() => rememberCaret(block.id)}

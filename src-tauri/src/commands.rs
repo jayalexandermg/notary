@@ -3,7 +3,7 @@ use crate::db::{Database, Note, Settings};
 use crate::note_window::create_note_window;
 use crate::hotkeys;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_note(app: AppHandle, pos_x: Option<i32>, pos_y: Option<i32>) -> Result<Note, String> {
     let db = app.state::<Database>();
     let x = pos_x.unwrap_or(100);
@@ -15,19 +15,19 @@ pub fn create_note(app: AppHandle, pos_x: Option<i32>, pos_y: Option<i32>) -> Re
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_note(app: AppHandle, id: String) -> Result<Option<Note>, String> {
     let db = app.state::<Database>();
     db.get_note(&id).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_all_notes(app: AppHandle) -> Result<Vec<Note>, String> {
     let db = app.state::<Database>();
     db.get_all_notes().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub fn update_note(
     app: AppHandle,
@@ -75,7 +75,7 @@ pub fn update_note(
     ).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn close_note(app: AppHandle, id: String) -> Result<(), String> {
     let db = app.state::<Database>();
     db.close_note(&id).map_err(|e| e.to_string())?;
@@ -89,7 +89,7 @@ pub fn close_note(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_note(app: AppHandle, id: String) -> Result<(), String> {
     let db = app.state::<Database>();
     db.delete_note(&id).map_err(|e| e.to_string())?;
@@ -103,7 +103,7 @@ pub fn delete_note(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
     let db = app.state::<Database>();
 
@@ -127,7 +127,7 @@ pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
     let opacity = opacity.clamp(0.1, 1.0);
     let id = window.label().replace("note-", "");
@@ -137,7 +137,7 @@ pub fn set_opacity(window: Window, opacity: f64) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_always_on_top(window: Window, on_top: bool) -> Result<(), String> {
     window.set_always_on_top(on_top).map_err(|e| e.to_string())?;
 
@@ -148,25 +148,25 @@ pub fn set_always_on_top(window: Window, on_top: bool) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_settings(app: AppHandle) -> Result<Settings, String> {
     let db = app.state::<Database>();
     db.get_settings().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_theme(app: AppHandle, theme: String) -> Result<(), String> {
     let db = app.state::<Database>();
     db.set_setting("theme", &theme).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_default_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
     let db = app.state::<Database>();
     db.set_setting("default_opacity", &opacity.to_string()).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn minimize_all_notes(app: AppHandle) -> Result<(), String> {
     for (label, window) in app.webview_windows() {
         if label.starts_with("note-") {
@@ -176,7 +176,7 @@ pub fn minimize_all_notes(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn show_all_notes(app: AppHandle) -> Result<(), String> {
     for (label, window) in app.webview_windows() {
         if label.starts_with("note-") {
@@ -187,7 +187,7 @@ pub fn show_all_notes(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_all_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
     let opacity = opacity.clamp(0.1, 1.0);
     let db = app.state::<Database>();
@@ -204,7 +204,7 @@ pub fn set_all_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
 }
 
 /// "Universal mode" — colour target for every open note at once.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_all_color(app: AppHandle, color: String) -> Result<(), String> {
     let db = app.state::<Database>();
     let notes = db.get_all_notes().map_err(|e| e.to_string())?;
@@ -220,7 +220,7 @@ pub fn set_all_color(app: AppHandle, color: String) -> Result<(), String> {
 }
 
 /// "Universal mode" — pin/unpin every open note at once.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_all_always_on_top(app: AppHandle, on_top: bool) -> Result<(), String> {
     let db = app.state::<Database>();
     for (label, window) in app.webview_windows() {
@@ -236,7 +236,7 @@ pub fn set_all_always_on_top(app: AppHandle, on_top: bool) -> Result<(), String>
 }
 
 /// "Universal mode" — resize every open note at once.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_all_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
     let db = app.state::<Database>();
     let w = width.max(200.0);
@@ -256,13 +256,13 @@ pub fn set_all_size(app: AppHandle, width: f64, height: f64) -> Result<(), Strin
 /// Generic settings read used for user-configurable values (keymap, global
 /// hotkeys, universal mode, default auto-stamp) that live in the shared
 /// key/value settings table rather than getting their own column/command.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_setting(app: AppHandle, key: String) -> Result<Option<String>, String> {
     let db = app.state::<Database>();
     db.get_setting_opt(&key).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), String> {
     let db = app.state::<Database>();
     db.set_setting(&key, &value).map_err(|e| e.to_string())?;
@@ -282,7 +282,7 @@ pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), Str
 }
 
 /// Rebind the two global (OS-level) hotkeys and persist them so they survive a restart.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_global_hotkeys(app: AppHandle, new_note: String, toggle_all: String) -> Result<(), String> {
     let db = app.state::<Database>();
     db.set_setting("hotkey_new_note", &new_note).map_err(|e| e.to_string())?;

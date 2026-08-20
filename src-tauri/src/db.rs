@@ -359,3 +359,96 @@ impl Database {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hthud-test-{name}-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Build a database with the pre-0.1.7 schema (no color / auto_stamp columns),
+    /// exactly as a user upgrading from 0.1.6 would have on disk.
+    fn seed_legacy(dir: &PathBuf) {
+        let conn = Connection::open(dir.join("notary.db")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (
+                id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
+                pos_x INTEGER NOT NULL, pos_y INTEGER NOT NULL,
+                width INTEGER NOT NULL DEFAULT 300, height INTEGER NOT NULL DEFAULT 200,
+                opacity REAL NOT NULL DEFAULT 0.95, is_open INTEGER NOT NULL DEFAULT 1,
+                is_minimized INTEGER NOT NULL DEFAULT 0, always_on_top INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+             ALTER TABLE notes ADD COLUMN mode TEXT NOT NULL DEFAULT 'text';
+             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO notes (id, title, content, pos_x, pos_y, created_at, updated_at)
+                VALUES ('legacy-1', 'Old Note', '- [ ] legacy todo', 10, 20, '2026-01-01', '2026-01-01');",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn migrates_legacy_database_without_data_loss() {
+        let dir = temp_dir("migrate");
+        seed_legacy(&dir);
+
+        let db = Database::new(dir).expect("opening a 0.1.6 database must succeed");
+        let note = db.get_note("legacy-1").unwrap().expect("legacy note survives");
+
+        assert_eq!(note.title, "Old Note");
+        assert_eq!(note.content, "- [ ] legacy todo");
+        assert_eq!(note.pos_x, 10);
+        assert_eq!(note.color, "yellow", "new column gets its default");
+        assert!(!note.auto_stamp, "new column gets its default");
+    }
+
+    #[test]
+    fn persists_color_and_auto_stamp() {
+        let dir = temp_dir("columns");
+        let db = Database::new(dir).unwrap();
+        let note = db.create_note(0, 0).unwrap();
+
+        db.update_note(&note.id, None, None, None, Some("slate"), Some(true), None, None, None, None, None, None)
+            .unwrap();
+
+        let saved = db.get_note(&note.id).unwrap().unwrap();
+        assert_eq!(saved.color, "slate");
+        assert!(saved.auto_stamp);
+    }
+
+    #[test]
+    fn position_and_size_round_trip() {
+        let dir = temp_dir("geometry");
+        let db = Database::new(dir).unwrap();
+        let note = db.create_note(0, 0).unwrap();
+
+        db.update_note(&note.id, None, None, None, None, None, Some(300), Some(400), Some(640), Some(480), None, None)
+            .unwrap();
+
+        let saved = db.get_note(&note.id).unwrap().unwrap();
+        assert_eq!((saved.pos_x, saved.pos_y), (300, 400));
+        assert_eq!((saved.width, saved.height), (640, 480));
+    }
+
+    #[test]
+    fn missing_setting_reads_as_none_not_error() {
+        let dir = temp_dir("settings");
+        let db = Database::new(dir).unwrap();
+
+        assert_eq!(db.get_setting_opt("keymap").unwrap(), None);
+        db.set_setting("keymap", "{\"bold\":\"Mod+B\"}").unwrap();
+        assert_eq!(db.get_setting_opt("keymap").unwrap().as_deref(), Some("{\"bold\":\"Mod+B\"}"));
+    }
+
+    #[test]
+    fn reopening_an_already_migrated_database_is_a_noop() {
+        let dir = temp_dir("idempotent");
+        seed_legacy(&dir);
+        Database::new(dir.clone()).unwrap();
+        let db = Database::new(dir).expect("second open must not fail on repeated migrations");
+        assert_eq!(db.get_note("legacy-1").unwrap().unwrap().color, "yellow");
+    }
+}

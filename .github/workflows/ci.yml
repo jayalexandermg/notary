@@ -43,3 +43,6 @@ jobs:
 
       - name: Cargo check
         run: cd src-tauri && cargo check
+
+      - name: Cargo test
+        run: cd src-tauri && cargo test --lib

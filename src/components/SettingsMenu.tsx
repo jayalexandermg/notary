@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NOTE_COLORS } from '../lib/colors';
-import { Note, deleteNote, getAllNotes, minimizeAllNotes, openNote, showAllNotes, updateNote } from '../lib/tauri';
+import { Note, closeNote, getAllNotes, minimizeAllNotes, openNote, showAllNotes, updateNote } from '../lib/tauri';
 
 interface SettingsMenuProps {
   noteId: string;
@@ -61,7 +61,9 @@ export function SettingsMenu({
     const mergedContent = [wrap(currentTitle, liveContent), wrap(sourceTitle, sourceNote.content)].join('\n');
     const mergedTitle = title || sourceNote.title || 'Merged Note';
     await updateNote(noteId, { content: mergedContent, title: mergedTitle });
-    await deleteNote(sourceNote.id);
+    // Non-destructive: the source note is only closed, never deleted. It stays
+    // in the notes list so a combine can always be walked back.
+    await closeNote(sourceNote.id);
     onMergeComplete();
   };
 
