@@ -1,4 +1,4 @@
-# HoverThought - Capture
+# HoverThought HUD
 
 A minimal, always-on-top sticky notes desktop app. Create floating notes that persist across sessions, with per-note transparency, drag-and-drop positioning, and a clean interface.
 
