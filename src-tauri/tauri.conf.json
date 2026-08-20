@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "HoverThought HUD",
+  "productName": "HoverThought",
   "version": "0.1.7",
   "identifier": "com.hoverthought.hud",
   "build": {
@@ -29,6 +29,24 @@
     "windows": {
       "wix": {
         "upgradeCode": "a920a0e7-bebf-5189-bf5f-b75077bb8aeb"
+      }
+    },
+    "linux": {
+      "deb": {
+        "conflicts": [
+          "hover-thought-hud"
+        ],
+        "replaces": [
+          "hover-thought-hud"
+        ]
+      },
+      "rpm": {
+        "conflicts": [
+          "hover-thought-hud"
+        ],
+        "obsoletes": [
+          "hover-thought-hud"
+        ]
       }
     }
   }

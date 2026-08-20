@@ -45,7 +45,7 @@ pub fn run() {
             if notes.is_empty() {
                 // No notes at all — create a welcome note
                 if let Ok(note) = db.create_note(100, 100) {
-                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought HUD!\n\nUse + to create notes\nTab then Enter starts a to-do\nUse the gear menu for color, opacity and keyboard shortcuts"), None, None, None, None, None, None, None, None, None);
+                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought!\n\nUse + to create notes\nTab then Enter starts a to-do\nUse the gear menu for color, opacity and keyboard shortcuts"), None, None, None, None, None, None, None, None, None);
                     let _ = note_window::create_note_window(&app_handle, &note);
                 }
             } else if !has_visible_window {
