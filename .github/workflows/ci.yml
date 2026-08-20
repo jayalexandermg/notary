@@ -38,6 +38,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check IPC argument naming
+        run: node scripts/check-ipc-naming.mjs
+
       - name: Build frontend
         run: pnpm build
 

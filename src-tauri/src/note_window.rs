@@ -26,6 +26,15 @@ pub fn create_note_window(app: &AppHandle, note: &Note) -> Result<(), String> {
     Ok(())
 }
 
+pub fn spawn_note_window(app: &AppHandle, note: Note) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = create_note_window(&app, &note) {
+            eprintln!("Failed to create window for note {}: {}", note.id, e);
+        }
+    });
+}
+
 pub fn restore_open_notes(app: &AppHandle, db: &Database) -> Result<(), String> {
     let notes = db.get_open_notes().map_err(|e| e.to_string())?;
 

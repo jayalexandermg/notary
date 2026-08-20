@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 use crate::db::Database;
-use crate::note_window::{close_all_note_windows, create_note_window, show_all_note_windows};
+use crate::note_window::{close_all_note_windows, show_all_note_windows, spawn_note_window};
 
 static NOTES_VISIBLE: AtomicBool = AtomicBool::new(true);
 
@@ -85,9 +85,7 @@ pub fn apply_hotkeys(app: &AppHandle, new_note_accel: &str, toggle_accel: &str) 
             }
         };
 
-        if let Err(e) = create_note_window(app, &note) {
-            eprintln!("Failed to create note window: {}", e);
-        }
+        spawn_note_window(app, note);
     }).map_err(|e| e.to_string())?;
 
     app.global_shortcut().on_shortcut(toggle_shortcut, move |app, _shortcut, _event| {

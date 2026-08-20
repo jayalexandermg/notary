@@ -3,8 +3,10 @@ use crate::db::{Database, Note, Settings};
 use crate::note_window::create_note_window;
 use crate::hotkeys;
 
+// async so window creation never blocks the caller — see v0.1.8, which fixed a
+// deadlock when creating a new note window on Windows.
 #[tauri::command(rename_all = "snake_case")]
-pub fn create_note(app: AppHandle, pos_x: Option<i32>, pos_y: Option<i32>) -> Result<Note, String> {
+pub async fn create_note(app: AppHandle, pos_x: Option<i32>, pos_y: Option<i32>) -> Result<Note, String> {
     let db = app.state::<Database>();
     let x = pos_x.unwrap_or(100);
     let y = pos_y.unwrap_or(100);
@@ -103,8 +105,9 @@ pub fn delete_note(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
+// async for the same reason as create_note.
 #[tauri::command(rename_all = "snake_case")]
-pub fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
+pub async fn open_note(app: AppHandle, id: String) -> Result<Note, String> {
     let db = app.state::<Database>();
 
     // Mark as open in database
