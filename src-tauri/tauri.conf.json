@@ -43,6 +43,11 @@
           "hover-thought-hud"
         ]
       }
+    },
+    "windows": {
+      "wix": {
+        "upgradeCode": "a920a0e7-bebf-5189-bf5f-b75077bb8aeb"
+      }
     }
   }
 }
