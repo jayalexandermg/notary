@@ -41,6 +41,9 @@ jobs:
       - name: Check IPC argument naming
         run: node scripts/check-ipc-naming.mjs
 
+      - name: Check version consistency
+        run: node scripts/check-version-sync.mjs
+
       - name: Build frontend
         run: pnpm build
 

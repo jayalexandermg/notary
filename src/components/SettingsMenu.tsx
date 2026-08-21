@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NOTE_COLORS } from '../lib/colors';
-import { Note, closeNote, getAllNotes, minimizeAllNotes, openNote, showAllNotes, updateNote } from '../lib/tauri';
+import { Note, closeNote, getAllNotes, getAppVersion, minimizeAllNotes, openNote, showAllNotes, updateNote } from '../lib/tauri';
 
 interface SettingsMenuProps {
   noteId: string;
@@ -34,9 +34,12 @@ export function SettingsMenu({
   onMergeComplete,
 }: SettingsMenuProps) {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
     getAllNotes().then(setNotes).catch(console.error);
+    // Never let a missing version string break the settings menu.
+    getAppVersion().then(setVersion).catch(() => setVersion(null));
   }, []);
 
   const handleMinimizeAll = () => minimizeAllNotes().catch(console.error);
@@ -160,6 +163,10 @@ export function SettingsMenu({
           ))}
         {notes.filter((n) => n.id !== noteId).length === 0 && <p className="settings-empty">No other notes</p>}
       </div>
+
+      <div className="settings-divider" />
+
+      <p className="settings-version">HoverThought{version ? ` v${version}` : ''}</p>
     </div>
   );
 }

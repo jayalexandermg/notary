@@ -80,6 +80,7 @@ pub fn run() {
             commands::get_setting,
             commands::set_setting,
             commands::set_global_hotkeys,
+            commands::get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -298,3 +298,10 @@ pub fn set_global_hotkeys(app: AppHandle, new_note: String, toggle_all: String) 
 
     Ok(())
 }
+
+/// Version of the running binary, resolved at build time from Cargo.toml, so the
+/// version shown in Settings can never disagree with what is actually installed.
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}

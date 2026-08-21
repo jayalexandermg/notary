@@ -661,3 +661,12 @@ body {
 .keybind-reset {
   @apply w-full mt-3 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700;
 }
+
+/* Version readout at the foot of the settings dropdown — small and quiet, but
+   always present so "am I actually up to date?" is a glance, not an
+   investigation. */
+.settings-version {
+  @apply text-xs text-gray-500 text-center;
+  padding: 2px 0;
+  user-select: text;
+}

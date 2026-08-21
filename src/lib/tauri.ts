@@ -156,3 +156,8 @@ export async function setSetting(key: string, value: string): Promise<void> {
 export async function setGlobalHotkeys(newNote: string, toggleAll: string): Promise<void> {
   return invoke('set_global_hotkeys', { new_note: newNote, toggle_all: toggleAll });
 }
+
+/** Version of the running build, read from the binary itself. */
+export async function getAppVersion(): Promise<string> {
+  return invoke('get_app_version');
+}
