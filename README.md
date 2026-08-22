@@ -1,4 +1,4 @@
-# HoverThought HUD
+# HoverThought
 
 A minimal, always-on-top sticky notes desktop app. Create floating notes that persist across sessions, with per-note transparency, drag-and-drop positioning, and a clean interface.
 
@@ -7,11 +7,15 @@ Built with [Tauri 2](https://tauri.app/) (Rust + React + TypeScript).
 ## Features
 
 - **Floating notes** - Each note is a separate always-on-top window
-- **Persistent** - Notes save automatically (content, position, size, opacity)
-- **Note management** - Create, hide, reopen, rename, merge, and delete notes
-- **Transparency control** - Per-note opacity slider
-- **Todo checkboxes** - Type `- [ ]` for interactive checkboxes
-- **Merge notes** - Combine multiple notes into one
+- **Persistent** - Notes save automatically (content, position, size, opacity, color)
+- **Note management** - Create, hide, reopen, rename, combine, split, and delete notes
+- **Rich blocks** - Headings, bullets, todos and collapsible toggles, with **bold**/*italic*/`code`
+- **Native todos** - Todos are ordinary lines, not a mode; nest them and parents auto-check
+- **Formatting toolbar** - Collapsible toolbar with formatting and quick actions
+- **Transparency & color** - Per-note opacity slider and colour palette
+- **Universal mode** - Apply opacity/colour/size to every open note at once
+- **Custom keybindings** - Rebind editor actions and the global hotkeys
+- **Sideline tray** - Stash several snippets, then drop them in wherever you need
 - **Cross-platform** - Windows, macOS, Linux
 
 ## Install
@@ -50,23 +54,42 @@ The built executable will be in `src-tauri/target/release/`.
 ### Managing notes
 - **Title** - Click the title text to rename
 - **Move** - Drag the titlebar
-- **Resize** - Drag the window edges
-- **Opacity** - Hover near the bottom to reveal the opacity slider
-- **Hide (X)** - Closes the note window; reopenable from the menu
+- **Resize** - Drag the window edges or the corner grip
+- **Size presets** - Open the Format toolbar for Mini / Compact / Standard / Full screen
+- **Opacity & colour** - In the gear (settings) menu
+- **Hide (X)** - Closes the note window; reopenable from the settings menu
 - **Delete (trash icon)** - Permanently removes the note
-- **Merge** - Open the menu, click "Merge" next to any note to combine it into the current one
+- **Combine** - Gear menu → "Combine" next to any note. Each note's content lands in its
+  own toggle, and the source note is closed rather than deleted.
+- **Split** - Select text, right-click → "Split into new note"
 
-### Todo checkboxes
-Type `- [ ]` followed by your task text. Click the checkbox to toggle it.
+### Todos
+Todos are a normal kind of line, not a mode — add or remove them anywhere, any time.
+
+- Press **Tab then Enter** on any line to turn it into a todo
+- Or type `[]` followed by a space
+- **Enter** on a todo always starts another todo
+- **Tab** indents a todo under the one above it
+- When every child of a todo is checked, the parent checks itself
+- Checked todos are struck through and slightly faded
 
 ```
 - [ ] Unchecked item
 - [x] Completed item
+  - [x] Nested child
 ```
+
+### Other blocks
+- `# `, `## `, `### ` + space — headings
+- `- ` + space — bullet
+- `> ` + space — collapsible toggle (houses everything indented beneath it)
 
 ### Keyboard shortcuts
 - `Ctrl+Alt+N` - Create new note
 - `Ctrl+Alt+H` - Hide/show all notes
+
+Editor shortcuts (bold, italic, headings, todo, toggle, timestamp, sideline, split)
+and both global hotkeys can be rebound in **Settings → Keyboard shortcuts**.
 
 *Note: Global shortcuts may not work in all environments (e.g., WSLg).*
 

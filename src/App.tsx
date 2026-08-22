@@ -7,13 +7,35 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const label = getCurrentWindow().label;
-      setWindowLabel(label);
-    } catch (e) {
-      console.error('Failed to get window label:', e);
-      setError('Window initialization failed');
-    }
+    let cancelled = false;
+    let attempts = 0;
+
+    const loadWindowLabel = () => {
+      try {
+        const label = getCurrentWindow().label;
+        if (!cancelled) {
+          setWindowLabel(label);
+          setError(null);
+        }
+      } catch (e) {
+        attempts += 1;
+        if (attempts < 20) {
+          window.setTimeout(loadWindowLabel, 50);
+          return;
+        }
+
+        console.error('Failed to get window label:', e);
+        if (!cancelled) {
+          setError('Window initialization failed');
+        }
+      }
+    };
+
+    loadWindowLabel();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (error) {
@@ -35,7 +57,7 @@ function App() {
 
   return (
     <div className="p-4 text-sm opacity-50">
-      HoverThought HUD — press Ctrl+Alt+N to create a note
+      HoverThought — press Ctrl+Alt+N to create a note
     </div>
   );
 }

@@ -38,8 +38,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check IPC argument naming
+        run: node scripts/check-ipc-naming.mjs
+
+      - name: Check version consistency
+        run: node scripts/check-version-sync.mjs
+
       - name: Build frontend
         run: pnpm build
 
       - name: Cargo check
         run: cd src-tauri && cargo check
+
+      - name: Cargo test
+        run: cd src-tauri && cargo test --lib

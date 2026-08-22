@@ -4,7 +4,7 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use crate::db::Database;
-use crate::note_window::create_note_window;
+use crate::note_window::spawn_note_window;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
@@ -23,14 +23,14 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("HoverThought HUD")
+        .tooltip("HoverThought")
         .menu(&menu)
         .on_menu_event(|app, event| {
             match event.id.as_ref() {
                 "new_note" => {
                     let db = app.state::<Database>();
                     if let Ok(note) = db.create_note(100, 100) {
-                        let _ = create_note_window(app, &note);
+                        spawn_note_window(app, note);
                     }
                 }
                 "show_all" => {

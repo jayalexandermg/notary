@@ -73,6 +73,24 @@ export function useNote(noteId: string) {
     [noteId]
   );
 
+  // Update color
+  const updateColor = useCallback(
+    async (color: string) => {
+      setNote((prev) => (prev ? { ...prev, color } : null));
+      await updateNote(noteId, { color });
+    },
+    [noteId]
+  );
+
+  // Update auto-stamp preference
+  const updateAutoStamp = useCallback(
+    async (autoStamp: boolean) => {
+      setNote((prev) => (prev ? { ...prev, auto_stamp: autoStamp } : null));
+      await updateNote(noteId, { auto_stamp: autoStamp });
+    },
+    [noteId]
+  );
+
   // Update always on top — call both JS and Rust API for cross-platform reliability
   const updateAlwaysOnTop = useCallback(
     async (alwaysOnTop: boolean) => {
@@ -138,16 +156,26 @@ export function useNote(noteId: string) {
     };
   }, [noteId]);
 
-  // Listen for global opacity-updated events (from set_all_opacity command)
+  // Listen for global broadcast events (from the *_all commands, used by universal mode)
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenOpacity: (() => void) | undefined;
+    let unlistenColor: (() => void) | undefined;
+
     listen<number>('opacity-updated', (event) => {
       setNote((prev) => (prev ? { ...prev, opacity: event.payload } : null));
     }).then((fn) => {
-      unlisten = fn;
+      unlistenOpacity = fn;
     });
+
+    listen<string>('color-updated', (event) => {
+      setNote((prev) => (prev ? { ...prev, color: event.payload } : null));
+    }).then((fn) => {
+      unlistenColor = fn;
+    });
+
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenOpacity) unlistenOpacity();
+      if (unlistenColor) unlistenColor();
     };
   }, []);
 
@@ -163,6 +191,8 @@ export function useNote(noteId: string) {
     error,
     updateContent,
     updateOpacity,
+    updateColor,
+    updateAutoStamp,
     updateAlwaysOnTop,
     updateTitle,
     saveNow,

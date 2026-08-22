@@ -8,6 +8,7 @@
   --note-text: #1a1a1a;
   --titlebar-bg: rgba(245, 231, 158, 0.9);
   --button-hover: rgba(0, 0, 0, 0.1);
+  --accent: #3b82f6;
 }
 
 .dark {
@@ -43,12 +44,21 @@ body {
   border: 1px solid var(--note-border);
 }
 
+/* Dark note colours (slate/ink) need light text + lighter chrome. */
+.note-card-dark {
+  --note-text: #e8e8e8;
+  --note-border: rgba(255, 255, 255, 0.12);
+  --titlebar-bg: rgba(0, 0, 0, 0.28);
+  --button-hover: rgba(255, 255, 255, 0.14);
+}
+
 .titlebar {
   background-color: var(--titlebar-bg);
+  flex-shrink: 0;
 }
 
 .titlebar-button {
-  @apply w-6 h-6 flex items-center justify-center rounded transition-colors;
+  @apply w-6 h-6 flex items-center justify-center rounded transition-colors flex-shrink-0;
 }
 
 .titlebar-button:hover {
@@ -59,9 +69,27 @@ body {
   @apply bg-red-500 text-white;
 }
 
-/* Resize handle */
+/* Titles stay legible even in the "mini" size preset. */
+.note-title {
+  min-width: 24px;
+  font-weight: 500;
+}
+
+/* Bigger diagonal resize hitbox — the visible glyph stays small, the
+   clickable area around it is generous so corner-resizing isn't fiddly. */
 .resize-handle {
-  @apply absolute bottom-0 right-0 w-4 h-4 cursor-se-resize opacity-30 hover:opacity-60 transition-opacity;
+  @apply absolute bottom-0 right-0 flex items-end justify-end;
+  width: 26px;
+  height: 26px;
+  padding: 6px;
+  cursor: se-resize;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+  z-index: 5;
+}
+
+.resize-handle:hover {
+  opacity: 0.7;
 }
 
 /* Pin button */
@@ -69,56 +97,314 @@ body {
   @apply text-blue-500;
 }
 
-/* Note editor */
-.note-editor {
+/* ------------------------------------------------------------------ */
+/* Block editor                                                        */
+/* ------------------------------------------------------------------ */
+
+.block-editor {
   width: 100%;
   height: 100%;
   overflow-y: auto;
-}
-
-.editor-textarea {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
-  outline: none;
+  padding: 8px 12px 32px;
   font-size: 14px;
-  line-height: 1.5;
-  color: var(--note-text);
-  padding: 8px 12px 24px;
-  resize: none;
-  word-break: break-word;
+  line-height: 1.55;
+}
+
+.block-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  position: relative;
+  padding: 1px 0;
+}
+
+.block-gutter {
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.block-text {
+  flex: 1;
+  min-width: 0;
+  outline: none;
   white-space: pre-wrap;
-  font-family: inherit;
+  word-break: break-word;
+  caret-color: var(--note-text);
 }
 
-.editor-textarea::placeholder {
+.block-text:empty::before {
+  content: attr(data-placeholder);
   color: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
-.dark .editor-textarea::placeholder {
+.note-card-dark .block-text:empty::before {
   color: rgba(255, 255, 255, 0.35);
 }
 
-/* Note editor scrollbar */
-.note-editor::-webkit-scrollbar {
+.block-text code {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.note-card-dark .block-text code {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.block-row-h1 .block-text { font-size: 1.35em; font-weight: 700; padding: 3px 0; }
+.block-row-h2 .block-text { font-size: 1.18em; font-weight: 700; padding: 2px 0; }
+.block-row-h3 .block-text { font-size: 1.05em; font-weight: 600; padding: 1px 0; }
+
+.block-bullet {
+  font-size: 1.1em;
+  line-height: 1.55;
+  opacity: 0.7;
+}
+
+/* Todo checkbox */
+.block-check {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 4px;
+  border: 1.5px solid currentColor;
+  opacity: 0.55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--note-text);
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.block-check:hover {
+  opacity: 0.9;
+}
+
+.block-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  opacity: 0.85;
+}
+
+/* Checked todos: struck through and a touch faded — never fully hidden. */
+.block-row-todo.is-checked .block-text {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+/* Toggle blocks */
+.block-caret {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--note-text);
+  opacity: 0.6;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.block-caret:hover {
+  opacity: 1;
+}
+
+.block-caret.collapsed svg {
+  transform: rotate(0deg);
+}
+
+.block-caret:not(.collapsed) svg {
+  transform: rotate(90deg);
+}
+
+.block-row-toggle .block-text {
+  font-weight: 600;
+}
+
+.block-collapsed-count {
+  align-self: center;
+  font-size: 10px;
+  opacity: 0.5;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 0 6px;
+  line-height: 16px;
+  flex-shrink: 0;
+}
+
+.note-card-dark .block-collapsed-count {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.block-stamp {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 10px;
+  opacity: 0.4;
+  white-space: nowrap;
+  padding-left: 4px;
+}
+
+/* Block editor scrollbar */
+.block-editor::-webkit-scrollbar {
   width: 4px;
 }
 
-.note-editor::-webkit-scrollbar-track {
+.block-editor::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.note-editor::-webkit-scrollbar-thumb {
+.block-editor::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
 }
 
-.dark .note-editor::-webkit-scrollbar-thumb {
+.note-card-dark .block-editor::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Settings dropdown slider */
+/* ------------------------------------------------------------------ */
+/* Format toolbar                                                      */
+/* ------------------------------------------------------------------ */
+
+.format-toolbar {
+  flex-shrink: 0;
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--note-border);
+}
+
+.toolbar-handle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--note-text);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.toolbar-handle:hover {
+  opacity: 0.9;
+}
+
+.toolbar-handle-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.format-toolbar.is-open .toolbar-handle {
+  opacity: 0.8;
+}
+
+.toolbar-rows {
+  padding: 4px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.toolbar-label {
+  font-size: 10px;
+  opacity: 0.55;
+  margin-right: 2px;
+}
+
+.toolbar-button {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--note-text);
+  font-size: 11px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.toolbar-button.is-wide {
+  padding: 0 8px;
+}
+
+.toolbar-button:hover {
+  background: var(--button-hover);
+}
+
+.toolbar-button.is-active {
+  background: var(--accent);
+  color: white;
+}
+
+.toolbar-button .mono {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--note-border);
+  margin: 0 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings dropdown                                                   */
+/* ------------------------------------------------------------------ */
+
+.settings-dropdown {
+  @apply absolute top-full right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg w-56 z-50 p-3 overflow-y-auto;
+  max-height: calc(100vh - 48px);
+}
+
+.settings-section {
+  margin-bottom: 10px;
+}
+
+.settings-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.settings-label {
+  font-size: 11px;
+  color: rgb(107 114 128);
+  font-weight: 500;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.settings-value {
+  font-size: 11px;
+  color: rgb(107 114 128);
+}
+
 .settings-dropdown input[type="range"] {
   @apply w-full h-1 rounded-lg appearance-none cursor-pointer;
   background: rgba(0, 0, 0, 0.2);
@@ -134,4 +420,253 @@ body {
 
 .dark .settings-dropdown input[type="range"]::-webkit-slider-thumb {
   @apply bg-gray-300;
+}
+
+.color-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.color-swatch.is-active {
+  border-color: var(--accent);
+}
+
+.settings-divider {
+  @apply border-t border-gray-200 dark:border-gray-700;
+  margin: 8px 0;
+}
+
+.settings-item {
+  @apply w-full px-2 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2;
+}
+
+.settings-toggle-row {
+  @apply w-full px-2 py-1.5 text-left text-xs rounded flex items-center justify-between mb-1 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.settings-switch {
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.settings-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: white;
+  transition: left 0.15s;
+}
+
+.settings-toggle-row.is-on .settings-switch {
+  background: var(--accent);
+}
+
+.settings-toggle-row.is-on .settings-switch::after {
+  left: 13px;
+}
+
+.settings-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.settings-note-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.settings-note-open {
+  @apply flex-1 flex items-center gap-2 min-w-0 px-2 py-1 text-left text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.note-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(156 163 175);
+  flex-shrink: 0;
+}
+
+.note-dot.is-open {
+  background: rgb(34 197 94);
+}
+
+.settings-merge-hint {
+  @apply px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-600 hover:bg-blue-500 hover:text-white rounded flex-shrink-0;
+}
+
+.settings-empty {
+  @apply text-xs text-gray-500 px-2 py-1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sideline tray                                                       */
+/* ------------------------------------------------------------------ */
+
+.sideline-tray {
+  @apply absolute top-2 right-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-40;
+  width: 220px;
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+}
+
+.sideline-tray-header {
+  @apply flex items-center justify-between px-2 py-1.5 border-b border-gray-200 dark:border-gray-700 text-xs font-medium;
+}
+
+.sideline-tray-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sideline-tray-actions button {
+  @apply text-xs opacity-60 hover:opacity-100;
+}
+
+.sideline-tray-body {
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sideline-empty {
+  @apply text-xs text-gray-500 p-2;
+}
+
+.sideline-item {
+  @apply border border-gray-200 dark:border-gray-700 rounded p-1.5;
+}
+
+.sideline-item-text {
+  font-size: 11px;
+  max-height: 60px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 4px;
+}
+
+.sideline-item-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.sideline-item-actions button {
+  @apply text-xs px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+/* ------------------------------------------------------------------ */
+/* Selection context menu                                              */
+/* ------------------------------------------------------------------ */
+
+.selection-menu {
+  @apply fixed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1;
+  min-width: 160px;
+}
+
+.selection-menu button {
+  @apply w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+/* ------------------------------------------------------------------ */
+/* Keybinding settings panel                                           */
+/* ------------------------------------------------------------------ */
+
+.keybind-overlay {
+  @apply absolute inset-0 z-50 flex items-start justify-center;
+  background: rgba(0, 0, 0, 0.25);
+  padding-top: 8px;
+}
+
+.keybind-panel {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg;
+  width: min(280px, 90%);
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+}
+
+.keybind-panel-header {
+  @apply flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium;
+}
+
+.keybind-panel-body {
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.keybind-section-label {
+  @apply text-xs text-gray-500 font-medium mt-2 mb-1;
+}
+
+.keybind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.keybind-hint {
+  display: block;
+  font-size: 9px;
+  opacity: 0.55;
+  font-style: normal;
+}
+
+.keybind-row-actions {
+  flex-shrink: 0;
+}
+
+.keybind-record {
+  @apply px-2 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:border-blue-400;
+  min-width: 64px;
+  text-align: center;
+}
+
+.keybind-record.is-recording {
+  @apply border-blue-500 text-blue-600;
+}
+
+.keybind-reset {
+  @apply w-full mt-3 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+/* Version readout at the foot of the settings dropdown — small and quiet, but
+   always present so "am I actually up to date?" is a glance, not an
+   investigation. */
+.settings-version {
+  @apply text-xs text-gray-500 text-center;
+  padding: 2px 0;
+  user-select: text;
 }
