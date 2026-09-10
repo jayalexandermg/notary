@@ -5,8 +5,13 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 
 use crate::{captures::{Capture, Presentation, WAITING_ROOM}, foreground, hotkeys, Database, Note};
 
-#[derive(Default)]
 pub struct CaptureRuntime(pub Mutex<Runtime>);
+
+impl Default for CaptureRuntime {
+    fn default() -> Self {
+        Self(Mutex::new(Runtime { workspace_window: foreground::remember(), ..Runtime::default() }))
+    }
+}
 
 #[derive(Default)]
 pub struct Runtime {
@@ -16,6 +21,7 @@ pub struct Runtime {
     ready: bool,
     started: Option<Instant>,
     previous_window: usize,
+    workspace_window: usize,
     committed: Option<Capture>,
     pending_editor: Option<String>,
     active_editor: Option<String>,
@@ -37,6 +43,11 @@ pub struct CaptureSession {
 }
 
 fn runtime(app: &AppHandle) -> tauri::State<'_, CaptureRuntime> { app.state::<CaptureRuntime>() }
+fn remember_workspace(state: &mut Runtime) -> usize {
+    let previous = foreground::remember();
+    if previous != 0 { state.workspace_window = previous; }
+    state.workspace_window
+}
 fn surface(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> {
     app.get_webview_window(label).ok_or_else(|| format!("{label} surface is unavailable"))
 }
@@ -76,6 +87,14 @@ pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
         let handle = app.clone();
         let owned_label = label.to_string();
         window.on_window_event(move |event| {
+            #[cfg(debug_assertions)]
+            if owned_label == "capture" && matches!(event, tauri::WindowEvent::Focused(true)) {
+                if let Ok(state) = runtime(&handle).0.lock() {
+                    if let Some(started) = state.started {
+                        eprintln!("capture native focus: {}", serde_json::json!({"sequence":state.sequence,"milliseconds":started.elapsed().as_secs_f64()*1000.0}));
+                    }
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 // The frontend uses the same save/discard transition as its ×/Escape.
@@ -118,7 +137,20 @@ fn place_capture(window: &WebviewWindow) -> Result<(), String> {
 /// Called directly from the OS accelerator. The timer starts before native work.
 pub fn show_capture(app: &AppHandle) -> Result<(), String> {
     let started = Instant::now();
-    let previous_window = foreground::remember();
+    let app = app.clone();
+    // Return from the native hotkey callback before activating another window.
+    // Windows activation can otherwise wait on the input queue handling that key.
+    // Keep the original timestamp, including scheduling and native dispatch time.
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = show_capture_at(&app, started) {
+            eprintln!("Quick Capture: {error}");
+            let _ = app.emit_to("anchor", "runtime-error", error);
+        }
+    });
+    Ok(())
+}
+
+fn show_capture_at(app: &AppHandle, started: Instant) -> Result<(), String> {
     let window = surface(app, "capture")?;
     let state = runtime(app);
     let session = {
@@ -128,15 +160,22 @@ pub fn show_capture(app: &AppHandle) -> Result<(), String> {
             state.sequence += 1;
             state.active = true;
             state.committed = None;
-            state.previous_window = previous_window;
+            state.previous_window = remember_workspace(&mut state);
             state.started = Some(started);
         }
         CaptureSession { sequence: state.sequence, active: true }
     };
+    // Prepare the existing input before native activation can block its event loop.
+    window.emit("capture-invoked", &session).map_err(|e| e.to_string())?;
     place_capture(&window)?;
+    let _placed = started.elapsed().as_secs_f64() * 1000.0;
     window.show().map_err(|e| e.to_string())?;
+    let _shown = started.elapsed().as_secs_f64() * 1000.0;
     window.set_focus().map_err(|e| e.to_string())?;
-    window.emit("capture-invoked", session).map_err(|e| e.to_string())
+    let _focused = started.elapsed().as_secs_f64() * 1000.0;
+    #[cfg(debug_assertions)]
+    eprintln!("capture invocation: {}", serde_json::json!({"sequence":session.sequence,"placed_ms":_placed,"shown_ms":_shown,"focused_ms":_focused,"dispatched_ms":started.elapsed().as_secs_f64()*1000.0}));
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -149,6 +188,7 @@ pub async fn capture_surface_ready(app: AppHandle) -> Result<CaptureSession, Str
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn capture_input_ready(app: AppHandle, sequence: u64) -> Result<(), String> {
+    let _received = runtime(&app).0.lock().map_err(|_| "Capture state unavailable")?.started.map(|start| start.elapsed().as_secs_f64() * 1000.0);
     let window = surface(&app, "capture")?;
     if !window.is_visible().map_err(|e| e.to_string())? || !window.is_focused().map_err(|e| e.to_string())? {
         return Err("Capture is not visible and focused".into());
@@ -157,6 +197,8 @@ pub async fn capture_input_ready(app: AppHandle, sequence: u64) -> Result<(), St
     let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
     if state.active && state.sequence == sequence {
         if let Some(started) = state.started.take() {
+            #[cfg(debug_assertions)]
+            eprintln!("capture readiness: {}", serde_json::json!({"sequence":sequence,"ack_received_ms":_received,"confirmed_ms":started.elapsed().as_secs_f64()*1000.0}));
             sample(&mut state, "hotkey_to_focused_input", started.elapsed().as_secs_f64() * 1000.0);
         }
     }
@@ -185,7 +227,7 @@ pub async fn commit_capture(app: AppHandle, sequence: u64, content: String) -> R
     // Never hold the runtime mutex while dispatching native window work. A
     // global-hotkey callback can run on the native event loop and need this lock.
     let hidden = hide_surface(&app, "capture");
-    if hidden.is_ok() { foreground::restore(previous_window); }
+    if hidden.is_ok() { eprintln!("capture foreground restored: {}", foreground::restore(previous_window)); }
     let state = runtime(&app);
     {
         let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
@@ -208,7 +250,7 @@ pub async fn cancel_capture(app: AppHandle, sequence: u64) -> Result<(), String>
     let previous_window = state.previous_window;
     drop(state);
     let hidden = hide_surface(&app, "capture");
-    if hidden.is_ok() { foreground::restore(previous_window); }
+    if hidden.is_ok() { eprintln!("capture foreground restored: {}", foreground::restore(previous_window)); }
     let state = runtime(&app);
     let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
     state.completing = false;
@@ -239,6 +281,14 @@ pub async fn set_anchor_expanded(app: AppHandle, expanded: bool, focused: bool, 
     let height = height.unwrap_or(190.0);
     if !height.is_finite() { return Err("Invalid retrieval height".into()); }
     let window = surface(&app, "anchor")?;
+    if expanded {
+        let state = runtime(&app);
+        let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
+        remember_workspace(&mut state);
+    } else if window.is_focused().map_err(|e| e.to_string())? {
+        let previous = runtime(&app).0.lock().map_err(|_| "Capture state unavailable")?.workspace_window;
+        foreground::restore(previous);
+    }
     window.set_focusable(expanded && focused).map_err(|e| e.to_string())?;
     place_anchor(&window, expanded, height)?;
     if expanded && focused { window.set_focus().map_err(|e| e.to_string())?; }
@@ -267,7 +317,7 @@ pub async fn engage_capture(app: AppHandle, id: String) -> Result<(), String> {
         let state = runtime(&app);
         let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
         state.pending_editor = Some(id.clone());
-        if state.active_editor.is_none() { state.editor_previous_window = foreground::remember(); }
+        if state.active_editor.is_none() { state.editor_previous_window = remember_workspace(&mut state); }
     }
     surface(&app, "editor")?.emit("editor-requested", id).map_err(|e| e.to_string())
 }
@@ -330,7 +380,7 @@ pub async fn save_capture_edit(app: AppHandle, id: String, content: String, titl
         db.save_presentation(&view).map_err(|e| e.to_string())?;
         if dismiss {
             hide_surface(&app, "editor")?;
-            foreground::restore(previous_window);
+            eprintln!("editor foreground restored: {}", foreground::restore(previous_window));
             {
                 let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
                 state.active_editor = None;
