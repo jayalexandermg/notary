@@ -1,65 +1,16 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { NoteCard } from './components/NoteCard';
+import { QuickCapture } from './components/QuickCapture';
 
-function App() {
-  const [windowLabel, setWindowLabel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const AmbientAnchor = lazy(() => import('./components/AmbientAnchor'));
+const CaptureEditor = lazy(() => import('./components/CaptureEditor'));
 
-  useEffect(() => {
-    let cancelled = false;
-    let attempts = 0;
-
-    const loadWindowLabel = () => {
-      try {
-        const label = getCurrentWindow().label;
-        if (!cancelled) {
-          setWindowLabel(label);
-          setError(null);
-        }
-      } catch (e) {
-        attempts += 1;
-        if (attempts < 20) {
-          window.setTimeout(loadWindowLabel, 50);
-          return;
-        }
-
-        console.error('Failed to get window label:', e);
-        if (!cancelled) {
-          setError('Window initialization failed');
-        }
-      }
-    };
-
-    loadWindowLabel();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (error) {
-    return <div className="p-4 text-sm text-red-500">{error}</div>;
-  }
-
-  if (!windowLabel) {
-    return (
-      <div className="note-card h-screen w-screen flex items-center justify-center rounded-lg shadow-note">
-        <span className="text-sm opacity-50">Loading...</span>
-      </div>
-    );
-  }
-
-  if (windowLabel.startsWith('note-')) {
-    const noteId = windowLabel.replace('note-', '');
-    return <NoteCard noteId={noteId} />;
-  }
-
-  return (
-    <div className="p-4 text-sm opacity-50">
-      HoverThought — press Ctrl+Alt+N to create a note
-    </div>
-  );
+export default function App() {
+  let label: string;
+  try { label = getCurrentWindow().label; }
+  catch { return <p role="alert">Open HoverThought as a desktop application.</p>; }
+  if (label === 'capture') return <QuickCapture />;
+  return <Suspense fallback={null}>
+    {label === 'anchor' ? <AmbientAnchor /> : label === 'editor' ? <CaptureEditor /> : null}
+  </Suspense>;
 }
-
-export default App;

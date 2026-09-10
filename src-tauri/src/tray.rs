@@ -1,60 +1,25 @@
-use tauri::{
-    AppHandle, Manager,
-    menu::{MenuBuilder, MenuItem},
-    tray::TrayIconBuilder,
-};
-use crate::db::Database;
-use crate::note_window::spawn_note_window;
+use tauri::{AppHandle, Emitter, Manager, menu::{MenuBuilder, MenuItem}, tray::TrayIconBuilder};
+use crate::capture_runtime;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
-    let show_all = MenuItem::with_id(app, "show_all", "Show All", true, None::<&str>)?;
-    let hide_all = MenuItem::with_id(app, "hide_all", "Hide All", true, None::<&str>)?;
+    let capture = MenuItem::with_id(app, "capture", "Quick Capture", true, None::<&str>)?;
+    let retrieve = MenuItem::with_id(app, "retrieve", "Retrieve thoughts", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-
-    let menu = MenuBuilder::new(app)
-        .item(&new_note)
-        .separator()
-        .item(&show_all)
-        .item(&hide_all)
-        .separator()
-        .item(&quit)
-        .build()?;
-
-    let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("HoverThought")
-        .menu(&menu)
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "new_note" => {
-                    let db = app.state::<Database>();
-                    if let Ok(note) = db.create_note(100, 100) {
-                        spawn_note_window(app, note);
-                    }
+    let menu = MenuBuilder::new(app).item(&capture).item(&retrieve).separator().item(&quit).build()?;
+    TrayIconBuilder::new().icon(app.default_window_icon().ok_or("Missing tray icon")?.clone())
+        .tooltip("HoverThought").menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "capture" => {
+                if let Err(error) = capture_runtime::show_capture(app) {
+                    let _ = app.emit_to("anchor", "runtime-error", error);
                 }
-                "show_all" => {
-                    for (label, window) in app.webview_windows() {
-                        if label.starts_with("note-") {
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                        }
-                    }
-                }
-                "hide_all" => {
-                    for (label, window) in app.webview_windows() {
-                        if label.starts_with("note-") {
-                            let _ = window.minimize();
-                        }
-                    }
-                }
-                "quit" => {
-                    app.exit(0);
-                }
-                _ => {}
             }
-        })
-        .build(app)?;
-
+            "retrieve" => {
+                if let Some(window) = app.get_webview_window("anchor") { let _ = window.show(); }
+                let _ = app.emit_to("anchor", "browse-requested", ());
+            }
+            "quit" => { let _ = app.emit_to("editor", "quit-requested", ()); }
+            _ => {}
+        }).build(app)?;
     Ok(())
 }

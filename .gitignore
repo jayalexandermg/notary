@@ -31,3 +31,8 @@ src-tauri/target/
 
 # Rust
 *.rs.bk
+
+# Local reforge toolchain and verification outputs
+/.reforge-tools/
+/.reforge-evidence/
+/.playwright-mcp/

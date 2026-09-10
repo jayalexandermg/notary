@@ -1,0 +1,54 @@
+/* Reuse HoverThought's existing note palette. The mock supplies behavior only. */
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: .55; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.quick-capture { height: 100%; border-radius: 12px; display: flex; flex-direction: column; padding: 18px 22px 10px; }
+.quick-capture textarea { resize: none; flex: 1; width: 100%; min-height: 0; background: transparent; outline: none; color: var(--note-text); font-size: 20px; line-height: 1.5; }
+.quick-capture footer { display: flex; gap: 8px; justify-content: space-between; align-items: center; border-top: 1px solid var(--note-border); padding-top: 7px; font-size: 12px; }
+.quick-capture footer span { opacity: .65; }
+.quick-capture button, .capture-editor-header button { width: 28px; height: 28px; flex-shrink: 0; border-radius: 5px; font-size: 21px; }
+.quick-capture button:hover, .capture-editor button:hover { background: var(--button-hover); }
+
+.ambient-root { width: 100%; height: 100%; position: relative; color: var(--note-text); font-size: 13px; }
+.ambient-mark { position: absolute; left: 0; top: calc(50% - 24px); width: 24px; height: 48px; border-radius: 0 6px 6px 0; opacity: .35; font-weight: 650; font-size: 12px; transition: opacity 120ms ease; }
+.ambient-mark:hover, .ambient-mark:focus-visible, .ambient-root:not(.mode-ambient) .ambient-mark { opacity: .95; }
+.anchor-error-dot { position: absolute; right: 3px; top: 4px; width: 4px; height: 4px; background: #b45309; border-radius: 50%; }
+.ambient-panel { position: absolute; inset: 0 0 0 28px; border-radius: 10px; display: flex; flex-direction: column; padding: 8px; overflow: hidden; }
+.ambient-path { display: flex; align-items: center; gap: 8px; padding: 2px 2px 8px; min-height: 32px; border-bottom: 1px solid var(--note-border); font-size: 12px; }
+.ambient-path button { padding: 3px 5px; border-radius: 4px; }
+.ambient-path button:hover { background: var(--button-hover); }
+.ambient-path .ambient-dismiss { margin-left: auto; font-size: 18px; }
+.ambient-items { display: flex; flex-direction: column; padding-top: 5px; min-height: 0; overflow-y: auto; }
+.ambient-items > button { display: flex; align-items: center; gap: 14px; padding: 10px 7px; text-align: left; border-radius: 5px; }
+.ambient-items > button:hover, .ambient-items > button:focus-visible { background: var(--button-hover); }
+.ambient-items > button span { flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.ambient-items small { opacity: .5; }
+.ambient-items .shortcut-link { margin-top: 5px; font-size: 11px; opacity: .7; }
+.capture-list { flex: 1; }
+.capture-preview { border-top: 1px solid var(--note-border); padding: 10px 7px 3px; max-height: 160px; display: flex; flex-direction: column; }
+.capture-preview p { white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+.capture-preview small { opacity: .55; font-size: 10px; padding-top: 8px; }
+.ambient-empty { padding: 16px 7px; line-height: 1.7; opacity: .6; }
+.capture-shortcut { padding: 16px 5px; display: flex; gap: 12px; flex-direction: column; }
+.capture-shortcut input { padding: 8px; border: 1px solid var(--note-border); border-radius: 5px; min-width: 0; background: rgba(255,255,255,.4); }
+.capture-shortcut p, .capture-shortcut [role=status] { font-size: 11px; opacity: .65; }
+.capture-shortcut button { padding: 7px; border-radius: 5px; background: var(--titlebar-bg); }
+.capture-error { padding: 9px 5px; color: #9a3412; font-size: 11px; overflow-wrap: anywhere; }
+
+.capture-editor { display: flex; flex-direction: column; height: 100%; border-radius: 10px; overflow: hidden; }
+.capture-editor-header { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-bottom: 1px solid var(--note-border); background: var(--titlebar-bg); }
+.capture-editor-header .drag-grip { cursor: grab; opacity: .5; font-size: 18px; }
+.capture-editor-header input { min-width: 0; flex: 1; outline: none; background: transparent; font-size: 14px; font-weight: 600; }
+.capture-editor > textarea { background: transparent; color: var(--note-text); outline: none; resize: none; flex: 1; width: 100%; min-height: 0; padding: 16px 20px; font-size: 15px; line-height: 1.65; }
+.capture-editor-footer { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 10px; border-top: 1px solid var(--note-border); font-size: 11px; }
+.capture-editor-footer > span { flex: 1; opacity: .65; overflow-wrap: anywhere; }
+.presentation-controls { display: flex; align-items: center; gap: 10px; opacity: .15; transition: opacity 120ms; }
+.capture-editor-footer:hover .presentation-controls, .presentation-controls:focus-within { opacity: .8; }
+.presentation-controls button { padding: 3px; border-radius: 4px; }
+.presentation-controls label { display: flex; align-items: center; gap: 6px; }
+.presentation-controls input { width: 65px; }
+.editor-resize { cursor: se-resize; opacity: .4; }
+.editor-empty { font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .ambient-mark, .presentation-controls { transition: none; } }

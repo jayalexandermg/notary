@@ -1,87 +1,56 @@
-mod commands;
+mod captures;
+mod capture_runtime;
 mod db;
+mod foreground;
 mod hotkeys;
-mod note_window;
 mod tray;
 
 use tauri::Manager;
-
 pub use db::{Database, Note, Settings};
+
+#[tauri::command(rename_all = "snake_case")]
+async fn finish_quit(app: tauri::AppHandle) { app.exit(0); }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()
-                .map_err(|e| format!("Failed to get app data dir: {e}"))?;
-            let db = Database::new(app_data_dir)
-                .map_err(|e| format!("Failed to initialize database: {e}"))?;
-
-            // Store database in app state
-            app.manage(db);
-
-            // Register global hotkeys
-            let app_handle = app.handle().clone();
-            if let Err(e) = hotkeys::register_hotkeys(&app_handle) {
-                eprintln!("Failed to register hotkeys: {}", e);
+            let app_data_dir = app.path().app_data_dir()?;
+            // Debug smoke tests never rewrite the owner's data.
+            #[cfg(debug_assertions)]
+            let app_data_dir = std::env::var_os("HOVERTHOUGHT_TEST_DATA_DIR")
+                .map(std::path::PathBuf::from).unwrap_or(app_data_dir);
+            app.manage(Database::new(app_data_dir)?);
+            app.manage(capture_runtime::CaptureRuntime::default());
+            app.manage(hotkeys::Hotkeys::default());
+            capture_runtime::create_surfaces(app.handle())?;
+            if let Err(error) = hotkeys::register_hotkeys(app.handle()) {
+                eprintln!("Quick Capture shortcut registration failed: {error}");
             }
-
-            // Set up system tray
-            if let Err(e) = tray::setup_tray(app.handle()) {
-                eprintln!("Failed to setup system tray: {}", e);
-            }
-
-            // Restore open notes
-            let db = app.state::<Database>();
-            if let Err(e) = note_window::restore_open_notes(&app_handle, &db) {
-                eprintln!("Failed to restore notes: {}", e);
-            }
-
-            // Ensure at least one visible window exists
-            let notes = db.get_all_notes().unwrap_or_default();
-            let has_visible_window = app_handle.webview_windows().len() > 0;
-
-            if notes.is_empty() {
-                // No notes at all — create a welcome note
-                if let Ok(note) = db.create_note(100, 100) {
-                    let _ = db.update_note(&note.id, Some("Welcome"), Some("Welcome to HoverThought!\n\nUse + to create notes\nTab then Enter starts a to-do\nUse the gear menu for color, opacity and keyboard shortcuts"), None, None, None, None, None, None, None, None, None);
-                    let _ = note_window::create_note_window(&app_handle, &note);
-                }
-            } else if !has_visible_window {
-                // Notes exist but none are open — force-open the most recent one
-                if let Some(most_recent) = notes.first() {
-                    let _ = db.open_note(&most_recent.id);
-                    let _ = note_window::create_note_window(&app_handle, most_recent);
-                }
-            }
-
+            tray::setup_tray(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::create_note,
-            commands::get_note,
-            commands::get_all_notes,
-            commands::update_note,
-            commands::close_note,
-            commands::open_note,
-            commands::delete_note,
-            commands::set_opacity,
-            commands::set_always_on_top,
-            commands::get_settings,
-            commands::set_theme,
-            commands::set_default_opacity,
-            commands::minimize_all_notes,
-            commands::show_all_notes,
-            commands::set_all_opacity,
-            commands::set_all_color,
-            commands::set_all_always_on_top,
-            commands::set_all_size,
-            commands::get_setting,
-            commands::set_setting,
-            commands::set_global_hotkeys,
-            commands::get_app_version,
+            capture_runtime::capture_surface_ready,
+            capture_runtime::capture_input_ready,
+            capture_runtime::commit_capture,
+            capture_runtime::cancel_capture,
+            capture_runtime::report_commit_elapsed,
+            capture_runtime::get_capture_measurements,
+            capture_runtime::set_anchor_expanded,
+            capture_runtime::list_captures,
+            capture_runtime::list_legacy_notes,
+            capture_runtime::get_capture,
+            capture_runtime::engage_capture,
+            capture_runtime::pending_editor,
+            capture_runtime::show_editor,
+            capture_runtime::save_capture_edit,
+            capture_runtime::update_capture_presentation,
+            capture_runtime::get_capture_shortcut,
+            capture_runtime::set_capture_shortcut,
+            finish_quit,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error while running HoverThought");
 }

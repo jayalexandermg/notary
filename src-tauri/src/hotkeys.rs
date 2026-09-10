@@ -1,20 +1,26 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use std::sync::Mutex;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use crate::{capture_runtime, Database};
 
-use crate::db::Database;
-use crate::note_window::{close_all_note_windows, show_all_note_windows, spawn_note_window};
+pub const DEFAULT_CAPTURE: &str = "Ctrl+Alt+Shift+H";
 
-static NOTES_VISIBLE: AtomicBool = AtomicBool::new(true);
+#[derive(Default)]
+pub struct Hotkeys(Mutex<Registration>);
+#[derive(Default)]
+struct Registration {
+    shortcut: Option<Shortcut>,
+    binding: String,
+    error: Option<String>,
+}
+#[derive(Clone, Serialize)]
+pub struct ShortcutStatus {
+    pub binding: String,
+    pub registered: bool,
+    pub error: Option<String>,
+}
 
-const DEFAULT_NEW_NOTE: &str = "Ctrl+Alt+N";
-const DEFAULT_TOGGLE_ALL: &str = "Ctrl+Alt+H";
-
-/// Parse a binding string like "Mod+Alt+N" / "Ctrl+Alt+H" (as produced by the
-/// keybinding settings UI) into a `Shortcut`. Only letters and digits are
-/// supported as the trailing key — enough for the two global actions this app
-/// exposes, and it keeps the surface small enough to validate reliably across
-/// platforms.
 fn parse_shortcut(binding: &str) -> Result<Shortcut, String> {
     let parts: Vec<&str> = binding.split('+').filter(|p| !p.is_empty()).collect();
     let Some((&key_part, mod_parts)) = parts.split_last() else {
@@ -45,8 +51,10 @@ fn parse_shortcut(binding: &str) -> Result<Shortcut, String> {
         }
     }
 
+    if !modifiers.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER) { return Err("Use Ctrl, Alt, or Command with a key".into()); }
     let key = key_part.to_uppercase();
     let code = match key.as_str() {
+        "SPACE" => Code::Space,
         "A" => Code::KeyA, "B" => Code::KeyB, "C" => Code::KeyC, "D" => Code::KeyD,
         "E" => Code::KeyE, "F" => Code::KeyF, "G" => Code::KeyG, "H" => Code::KeyH,
         "I" => Code::KeyI, "J" => Code::KeyJ, "K" => Code::KeyK, "L" => Code::KeyL,
@@ -63,92 +71,84 @@ fn parse_shortcut(binding: &str) -> Result<Shortcut, String> {
     Ok(Shortcut::new(Some(modifiers), code))
 }
 
-/// (Re-)register the two global hotkeys, replacing whatever was registered before.
-/// Used both at startup (with the stored or default bindings) and whenever the
-/// user rebinds them from the keyboard shortcuts panel.
-pub fn apply_hotkeys(app: &AppHandle, new_note_accel: &str, toggle_accel: &str) -> Result<(), String> {
-    let new_note_shortcut = parse_shortcut(new_note_accel)?;
-    let toggle_shortcut = parse_shortcut(toggle_accel)?;
-
-    let _ = app.global_shortcut().unregister_all();
-
-    app.global_shortcut().on_shortcut(new_note_shortcut, move |app, _shortcut, _event| {
-        let db = app.state::<Database>();
-
-        // Create note at a default position (center-ish of screen)
-        // In a real app, we'd get the cursor position
-        let note = match db.create_note(100, 100) {
-            Ok(n) => n,
-            Err(e) => {
-                eprintln!("Failed to create note: {}", e);
-                return;
+fn register(app: &AppHandle, shortcut: Shortcut) -> Result<(), String> {
+    app.global_shortcut().on_shortcut(shortcut, |app, _, event| {
+        if event.state == ShortcutState::Pressed {
+            if let Err(error) = capture_runtime::show_capture(app) {
+                eprintln!("Quick Capture: {error}");
+                let _ = app.emit_to("anchor", "runtime-error", error);
             }
-        };
-
-        spawn_note_window(app, note);
-    }).map_err(|e| e.to_string())?;
-
-    app.global_shortcut().on_shortcut(toggle_shortcut, move |app, _shortcut, _event| {
-        let visible = NOTES_VISIBLE.load(Ordering::SeqCst);
-
-        if visible {
-            close_all_note_windows(app);
-            NOTES_VISIBLE.store(false, Ordering::SeqCst);
-        } else {
-            show_all_note_windows(app);
-            NOTES_VISIBLE.store(true, Ordering::SeqCst);
         }
-    }).map_err(|e| e.to_string())?;
+    }).map_err(|e| format!("Shortcut unavailable; it may be in use by another application: {e}"))
+}
 
+pub fn status(app: &AppHandle) -> Result<ShortcutStatus, String> {
+    let state = app.state::<Hotkeys>();
+    let state = state.0.lock().map_err(|_| "Shortcut state unavailable")?;
+    Ok(ShortcutStatus { binding: state.binding.clone(), registered: state.shortcut.is_some(), error: state.error.clone() })
+}
+
+/// Register the candidate before touching a working accelerator. A collision
+/// leaves the old accelerator and its persisted setting intact.
+pub fn apply_capture_shortcut(app: &AppHandle, binding: &str) -> Result<(), String> {
+    let candidate = parse_shortcut(binding)?;
+    let registration = app.state::<Hotkeys>();
+    let mut registration = registration.0.lock().map_err(|_| "Shortcut state unavailable")?;
+    if registration.shortcut == Some(candidate) { return Ok(()); }
+    register(app, candidate)?;
+    if let Some(previous) = registration.shortcut {
+        if let Err(error) = app.global_shortcut().unregister(previous) {
+            let _ = app.global_shortcut().unregister(candidate);
+            return Err(format!("Could not replace the current shortcut: {error}"));
+        }
+    }
+    if let Err(error) = app.state::<Database>().set_setting("capture_shortcut", binding) {
+        let _ = app.global_shortcut().unregister(candidate);
+        if let Some(previous) = registration.shortcut {
+            if let Err(restore_error) = register(app, previous) {
+                registration.shortcut = None;
+                registration.error = Some(restore_error.clone());
+                return Err(format!("Could not save shortcut: {error}; restore failed: {restore_error}"));
+            }
+        }
+        return Err(error.to_string());
+    }
+    registration.shortcut = Some(candidate);
+    registration.binding = binding.into();
+    registration.error = None;
     Ok(())
 }
 
-/// Register hotkeys at startup, using whatever the user last saved (falling
-/// back to the defaults for a first run or an unparsable stored value).
 pub fn register_hotkeys(app: &AppHandle) -> Result<(), String> {
-    let db = app.state::<Database>();
-    let new_note_accel = db.get_setting_opt("hotkey_new_note").ok().flatten().unwrap_or_else(|| DEFAULT_NEW_NOTE.to_string());
-    let toggle_accel = db.get_setting_opt("hotkey_toggle_all").ok().flatten().unwrap_or_else(|| DEFAULT_TOGGLE_ALL.to_string());
-
-    if let Err(e) = apply_hotkeys(app, &new_note_accel, &toggle_accel) {
-        eprintln!("Failed to apply stored hotkeys ({e}), falling back to defaults");
-        return apply_hotkeys(app, DEFAULT_NEW_NOTE, DEFAULT_TOGGLE_ALL);
+    let binding = app.state::<Database>().get_setting_opt("capture_shortcut")
+        .map_err(|e| e.to_string())?.unwrap_or_else(|| DEFAULT_CAPTURE.into());
+    if let Err(error) = apply_capture_shortcut(app, &binding) {
+        let state = app.state::<Hotkeys>();
+        let mut state = state.0.lock().map_err(|_| "Shortcut state unavailable")?;
+        state.binding = binding;
+        state.error = Some(error.clone());
+        return Err(error);
     }
-
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn parses_the_shipped_defaults() {
-        parse_shortcut(DEFAULT_NEW_NOTE).expect("default new-note hotkey must parse");
-        parse_shortcut(DEFAULT_TOGGLE_ALL).expect("default toggle-all hotkey must parse");
-    }
-
-    #[test]
-    fn parses_bindings_recorded_by_the_settings_ui() {
-        // The keybinding panel serializes with a portable "Mod" prefix.
-        for binding in ["Mod+Alt+N", "Mod+Shift+H", "Ctrl+Alt+N", "Alt+Shift+3", "Mod+K"] {
-            parse_shortcut(binding).unwrap_or_else(|e| panic!("{binding} should parse: {e}"));
+    fn parses_portable_and_development_shortcuts() {
+        for binding in [DEFAULT_CAPTURE, "Mod+Alt+N", "Ctrl+Alt+Space", "Alt+Shift+3", "Mod+K"] {
+            assert!(parse_shortcut(binding).is_ok(), "{binding}");
         }
     }
-
     #[test]
-    fn rejects_bindings_it_cannot_honour() {
-        // Rejected up front so a bad rebind reports an error instead of
-        // silently unregistering the working hotkeys.
-        assert!(parse_shortcut("").is_err());
-        assert!(parse_shortcut("Ctrl+Alt+F5").is_err(), "unsupported key must error");
-        assert!(parse_shortcut("Hyper+N").is_err(), "unknown modifier must error");
+    fn rejects_unsafe_or_unsupported_bindings_before_registration() {
+        for binding in ["", "H", "Shift+H", "Hyper+N", "Ctrl+Alt+F5"] {
+            assert!(parse_shortcut(binding).is_err(), "{binding}");
+        }
     }
-
     #[test]
     fn modifiers_are_not_silently_dropped() {
-        let with_alt = parse_shortcut("Ctrl+Alt+N").unwrap();
-        let without_alt = parse_shortcut("Ctrl+N").unwrap();
-        assert_ne!(with_alt, without_alt);
+        assert_ne!(parse_shortcut("Ctrl+Alt+N").unwrap(), parse_shortcut("Ctrl+N").unwrap());
     }
 }

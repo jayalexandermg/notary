@@ -36,7 +36,7 @@ pub struct Database {
 }
 
 impl Database {
-    fn conn(&self) -> SqlResult<std::sync::MutexGuard<'_, Connection>> {
+    pub(crate) fn conn(&self) -> SqlResult<std::sync::MutexGuard<'_, Connection>> {
         self.conn.lock().map_err(|_| {
             rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
@@ -54,6 +54,7 @@ impl Database {
             conn: Mutex::new(conn),
         };
         db.init_tables()?;
+        db.init_capture_tables()?;
         Ok(db)
     }
 
