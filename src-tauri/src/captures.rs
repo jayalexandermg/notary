@@ -11,6 +11,20 @@ use crate::Database;
 
 pub const WAITING_ROOM: &str = "waiting-room";
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Container {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub capture_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CaptureContext {
+    pub containers: Vec<Container>,
+    pub primary_container_id: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Capture {
     pub id: String,
@@ -124,6 +138,11 @@ impl Database {
                 ON containers(kind) WHERE kind = 'waiting_room';
             INSERT OR IGNORE INTO containers(id, name, kind)
                 VALUES ('waiting-room', 'Waiting Room', 'waiting_room');
+            CREATE TABLE IF NOT EXISTS capture_routing (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                primary_container_id TEXT REFERENCES containers(id)
+            );
+            INSERT OR IGNORE INTO capture_routing(singleton) VALUES (1);
             CREATE TABLE IF NOT EXISTS captures (
                 id TEXT PRIMARY KEY NOT NULL,
                 type TEXT NOT NULL CHECK(type = 'capture'),
@@ -156,6 +175,47 @@ impl Database {
         tx.commit()
     }
 
+    pub fn capture_context(&self) -> rusqlite::Result<CaptureContext> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT c.id, c.name, c.kind, COUNT(r.id) FROM containers c
+             LEFT JOIN captures r ON r.container_id = c.id GROUP BY c.id
+             ORDER BY CASE c.kind WHEN 'waiting_room' THEN 0 ELSE 1 END, c.name COLLATE NOCASE, c.id"
+        )?;
+        let containers = stmt.query_map([], |row| Ok(Container {
+            id: row.get(0)?, name: row.get(1)?, kind: row.get(2)?, capture_count: row.get(3)?,
+        }))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        let primary_container_id = conn.query_row(
+            "SELECT c.id FROM capture_routing r JOIN containers c ON c.id = r.primary_container_id
+             WHERE r.singleton = 1 AND c.kind = 'project'", [], |row| row.get(0)
+        ).optional()?;
+        Ok(CaptureContext { containers, primary_container_id })
+    }
+
+    pub fn create_project(&self, name: &str) -> rusqlite::Result<Container> {
+        let name = name.trim();
+        if name.is_empty() { return Err(error("A project needs a name")); }
+        let project = Container {
+            id: Uuid::now_v7().to_string(), name: name.into(), kind: "project".into(), capture_count: 0,
+        };
+        self.conn()?.execute("INSERT INTO containers(id, name, kind) VALUES (?, ?, 'project')",
+            params![project.id, project.name])?;
+        Ok(project)
+    }
+
+    pub fn set_primary_project(&self, id: Option<&str>) -> rusqlite::Result<()> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        if let Some(id) = id {
+            let is_project: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM containers WHERE id = ? AND kind = 'project')", [id], |r| r.get(0)
+            )?;
+            if !is_project { return Err(error("Primary must be an existing project")); }
+        }
+        tx.execute("UPDATE capture_routing SET primary_container_id = ? WHERE singleton = 1", [id])?;
+        tx.commit()
+    }
+
     /// This is the only new-record writer. No view/window fields enter it.
     pub fn create_capture(
         &self,
@@ -168,6 +228,14 @@ impl Database {
         if let Some(source_id) = derived_from {
             validate_source_id(source_id)?;
         }
+        // Resolve routing at commit, in the same transaction as the only record
+        // constructor. No frontend route value can override Primary/fallback.
+        let mut conn = self.conn()?;
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let destination: Option<String> = tx.query_row(
+            "SELECT c.id FROM capture_routing r JOIN containers c ON c.id = r.primary_container_id
+             WHERE r.singleton = 1 AND c.kind = 'project'", [], |row| row.get(0)
+        ).optional()?;
         let record = Capture {
             id: Uuid::now_v7().to_string(),
             record_type: "capture".into(),
@@ -176,14 +244,13 @@ impl Database {
             updated_at: String::new(),
             source: "hoverthought/quick-capture".into(),
             content: content.into(),
-            container_id: WAITING_ROOM.into(),
+            container_id: destination.unwrap_or_else(|| WAITING_ROOM.into()),
             title: None,
             derived_from: derived_from.map(str::to_owned),
             extra_fields: BTreeMap::new(),
         };
         let record = Capture { updated_at: record.created_at.clone(), ..record };
-        let conn = self.conn()?;
-        conn.execute(
+        tx.execute(
             "INSERT INTO captures(id, type, schema_version, created_at, updated_at,
                 source, content, container_id, title, derived_from)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -191,6 +258,7 @@ impl Database {
                 record.created_at, record.updated_at, record.source, record.content,
                 record.container_id, record.title, record.derived_from],
         )?;
+        tx.commit()?;
         Ok(record)
     }
 
@@ -218,13 +286,31 @@ impl Database {
         title: Option<&str>,
         container_id: &str,
     ) -> rusqlite::Result<Capture> {
+        self.patch_capture(id, Some(content), Some(title), Some(container_id))
+    }
+
+    pub fn edit_capture_text(&self, id: &str, content: &str, title: Option<&str>) -> rusqlite::Result<Capture> {
+        self.patch_capture(id, Some(content), Some(title), None)
+    }
+
+    pub fn reassign_capture(&self, id: &str, container_id: &str) -> rusqlite::Result<Capture> {
+        self.patch_capture(id, None, None, Some(container_id))
+    }
+
+    // Apply only the supplied fields under one lock/transaction. In particular,
+    // an autosave cannot put back a destination read before a concurrent move.
+    fn patch_capture(&self, id: &str, content: Option<&str>, title: Option<Option<&str>>,
+        container_id: Option<&str>) -> rusqlite::Result<Capture> {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let mut record = tx.query_row(
             &format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?"),
             [id], row_to_capture,
         )?;
-        let title = title.filter(|s| !s.is_empty()).map(str::to_owned);
+        let content = content.unwrap_or(&record.content).to_owned();
+        let title = title.map(|value| value.filter(|s| !s.is_empty()).map(str::to_owned))
+            .unwrap_or_else(|| record.title.clone());
+        let container_id = container_id.unwrap_or(&record.container_id).to_owned();
         if record.content != content || record.title != title || record.container_id != container_id {
             record.updated_at = next_mutation(&record.updated_at)?;
             record.content = content.into();

@@ -28,6 +28,8 @@ export interface Presentation {
 }
 
 export interface CaptureSession { sequence: number; active: boolean }
+export interface Container { id: string; name: string; kind: 'waiting_room' | 'project'; capture_count: number }
+export interface CaptureContext { containers: Container[]; primary_container_id: string | null }
 export interface ShortcutStatus { binding: string; registered: boolean; error: string | null }
 export interface LegacyNote { id: string; title: string; content: string; created_at: string }
 
@@ -38,7 +40,11 @@ export const api = {
   cancel: (sequence: number) => invoke<void>('cancel_capture', { sequence }),
   commitElapsed: (sequence: number, milliseconds: number) => invoke<void>('report_commit_elapsed', { sequence, milliseconds }),
   expand: (expanded: boolean, focused = false, height?: number) => invoke<void>('set_anchor_expanded', { expanded, focused, height }),
-  list: () => invoke<Capture[]>('list_captures'),
+  list: (container_id = 'waiting-room') => invoke<Capture[]>('list_captures', { container_id }),
+  context: () => invoke<CaptureContext>('get_capture_context'),
+  createProject: (name: string) => invoke<Container>('create_project', { name }),
+  setPrimary: (id: string | null) => invoke<void>('set_primary_project', { id }),
+  reassign: (id: string, container_id: string) => invoke<Capture>('reassign_capture', { id, container_id }),
   legacy: () => invoke<LegacyNote[]>('list_legacy_notes'),
   get: (id: string) => invoke<Capture>('get_capture', { id }),
   engage: (id: string) => invoke<void>('engage_capture', { id }),

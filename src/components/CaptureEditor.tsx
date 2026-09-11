@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api, Capture, Presentation } from '../lib/capture';
+import { useCaptureContext } from '../hooks/useCaptureContext';
 
 export default function CaptureEditor() {
+  const { context, contextError } = useCaptureContext();
+  const [moving, setMoving] = useState(false);
+  const [moveTo, setMoveTo] = useState('waiting-room');
   const [record, setRecord] = useState<Capture | null>(null);
   const [view, setView] = useState<Presentation | null>(null);
   const [message, setMessage] = useState('');
@@ -53,6 +57,7 @@ export default function CaptureEditor() {
         buffer.current = next;
         setRecord(next);
         setView(presentation);
+        setMoving(false);
         setMessage('Saved');
         requestAnimationFrame(() => input.current?.focus());
       } finally { setBusy(false); }
@@ -93,11 +98,28 @@ export default function CaptureEditor() {
     } catch (reason) { setMessage(String(reason)); }
   }
 
+  async function move() {
+    if (!buffer.current || busy) return;
+    const id = buffer.current.id;
+    setBusy(true);
+    try {
+      await save();
+      const saved = await api.reassign(id, moveTo);
+      if (buffer.current?.id === id) { buffer.current = saved; setRecord(saved); }
+      setMoving(false);
+      setMessage('Moved');
+    } catch (reason) { setMessage(`Could not move: ${String(reason)}`); }
+    finally { setBusy(false); }
+  }
+
   if (!record) return <div className="editor-empty" role="status">{message}</div>;
   return <main className="capture-editor ht-surface"
     onKeyDown={event => {
       if (event.nativeEvent.isComposing) return;
-      if (event.key === 'Escape') { event.preventDefault(); void dismiss(); }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!busy) { if (moving) setMoving(false); else void dismiss(); }
+      }
       if ((event.ctrlKey || event.metaKey) && event.key === 's') { event.preventDefault(); void save().catch(reason => setMessage(String(reason))); }
     }}>
     <header className="capture-editor-header">
@@ -110,14 +132,23 @@ export default function CaptureEditor() {
     <textarea ref={input} aria-label="Thought content" value={record.content} readOnly={busy} spellCheck
       onChange={event => edit(event.target.value, record.title)} />
     <footer className="capture-editor-footer">
-      <span className="surface-destination"><span className="surface-pip" aria-hidden="true" />{record.container_id === 'waiting-room' ? 'Waiting Room' : record.container_id}</span>
+      <span className="surface-destination" title={context?.containers.find(item => item.id === record.container_id)?.name || record.container_id}><span className="surface-pip" aria-hidden="true" /><span className="destination-name">{context?.containers.find(item => item.id === record.container_id)?.name || (record.container_id === 'waiting-room' ? 'Waiting Room' : 'Project')}</span></span>
       <span role="status">{message}</span>
       <div className="presentation-controls">
+        <button disabled={busy} onClick={() => { setMoveTo(record.container_id); setMoving(true); }} aria-label="Move thought to another container">Move</button>
         <button title="Keep above other windows" aria-label="Keep above other windows" aria-pressed={view?.always_on_top ?? true}
           onClick={() => void presentation(view?.opacity ?? 0.95, !view?.always_on_top)}>Pin</button>
       </div>
       <button className="editor-resize" title="Resize" aria-label="Resize thought"
         onMouseDown={() => void getCurrentWindow().startResizeDragging('SouthEast').catch(reason => setMessage(String(reason)))}>◢</button>
     </footer>
+    {moving && <form className="editor-move" aria-label="Move thought to a container" onSubmit={event => { event.preventDefault(); void move(); }}>
+      <label htmlFor="move-container">Move to</label>
+      <select id="move-container" value={moveTo} disabled={busy || !context} onChange={event => setMoveTo(event.target.value)}>
+        {context?.containers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select>
+      <div><button type="submit" disabled={busy || !context}>Move</button><button type="button" disabled={busy} onClick={() => setMoving(false)}>Cancel</button></div>
+      {contextError && <p role="alert">Could not load destinations: {contextError}</p>}
+    </form>}
   </main>;
 }

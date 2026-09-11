@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { api, CaptureSession } from '../lib/capture';
+import { useCaptureContext } from '../hooks/useCaptureContext';
 
 export function QuickCapture() {
+  const { context } = useCaptureContext();
+  const destination = context?.containers.find(item => item.id === (context.primary_container_id || 'waiting-room'))?.name || 'Automatic';
   const input = useRef<HTMLTextAreaElement>(null);
   const session = useRef<CaptureSession | null>(null);
   const busy = useRef(false);
@@ -96,7 +99,7 @@ export function QuickCapture() {
       }} />
     <footer>
       <span className="capture-hint" role="status">{error || (pending ? 'Saving…' : <><b>Enter</b> save · <b>Shift+Enter</b> newline · <b>Esc</b> discard</>)}</span>
-      <span className="surface-destination"><span className="surface-pip" aria-hidden="true" />Waiting Room</span>
+      <span className="surface-destination" title={destination}><span className="surface-pip" aria-hidden="true" /><span className="destination-name">{destination}</span></span>
       <button className="surface-close" aria-label="Discard draft" title="Discard draft (Esc)" onClick={() => void discard()} disabled={pending}>×</button>
     </footer>
   </main>;

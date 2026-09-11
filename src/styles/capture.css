@@ -57,6 +57,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .ht-surface .surface-close:hover { color: var(--gold-soft); border-color: var(--rim); background: rgba(255,217,102,.07); }
 .surface-destination { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.surface-destination { min-width: 0; max-width: 38%; }
+.destination-name { overflow: hidden; text-overflow: ellipsis; }
 .surface-pip { width: 3px; height: 3px; flex: none; border-radius: 50%; background: var(--gold); box-shadow: 0 0 5px var(--gold); }
 .quick-capture { padding: 11px 13px 7px; }
 .quick-capture textarea { resize: none; flex: 1; width: 100%; min-height: 0; background: transparent; outline: none; color: var(--text); font-size: 11.5px; line-height: 1.5; overflow: auto; }
@@ -74,6 +76,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .ambient-path { display: flex; align-items: center; gap: 8px; padding: 2px 2px 8px; min-height: 32px; border-bottom: 1px solid var(--note-border); font-size: 12px; }
 .ambient-path button { padding: 3px 5px; border-radius: 4px; }
 .ambient-path button:hover { background: var(--button-hover); }
+.ambient-path > span:last-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-route { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; padding: 7px 3px; }
+.project-route button { border: 1px solid var(--note-border); border-radius: 4px; padding: 5px; }
 .ambient-path .ambient-dismiss { margin-left: auto; font-size: 18px; }
 .ambient-items { display: flex; flex-direction: column; padding-top: 5px; min-height: 0; overflow-y: auto; }
 .ambient-items > button { display: flex; align-items: center; gap: 14px; padding: 10px 7px; text-align: left; border-radius: 5px; }
@@ -107,4 +112,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .capture-editor .presentation-controls button:hover { color: var(--gold-soft); background: rgba(255,217,102,.07); }
 .editor-resize { cursor: se-resize; opacity: .4; }
 .editor-empty { font-size: 13px; }
+.ht-surface .editor-move { position: absolute; z-index: 3; inset: 40px 10px auto; max-height: calc(100% - 50px); overflow-y: auto; padding: 12px; border: 1px solid var(--rim); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; gap: 9px; font-size: 11px; }
+.editor-move select, .editor-move button { border: 1px solid var(--rim); border-radius: 4px; background: var(--surface); color: var(--text); padding: 5px; }
+.editor-move > div { display: flex; gap: 8px; }
+.editor-move p { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .ambient-mark, .presentation-controls, .ht-surface .surface-close { transition: none; } }

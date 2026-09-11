@@ -13,6 +13,129 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn primary_routing_persists_and_unset_falls_back_without_moving_existing_captures() {
+    let fixture = Fixture::new();
+    let (project, inbox, routed) = {
+        let db = fixture.open();
+        let inbox = db.create_capture("before Primary", None).unwrap();
+        let project = db.create_project("  Coding  ").unwrap();
+        assert_eq!(project.name, "Coding");
+        assert_eq!(project.kind, "project");
+        assert_eq!(Uuid::parse_str(&project.id).unwrap().get_version_num(), 7);
+        assert_eq!(db.capture_context().unwrap().primary_container_id, None);
+        db.set_primary_project(Some(&project.id)).unwrap();
+        let routed = db.create_capture("  exact\ntext  ", None).unwrap();
+        assert_eq!(routed.container_id, project.id);
+        assert_eq!(routed.content, "  exact\ntext  ");
+        assert_eq!(db.get_capture(&inbox.id).unwrap(), inbox);
+        assert!(!serde_json::to_value(&routed).unwrap().as_object().unwrap().contains_key("primary"));
+        (project, inbox, routed)
+    };
+    let db = fixture.open();
+    assert_eq!(db.capture_context().unwrap().primary_container_id.as_deref(), Some(project.id.as_str()));
+    assert_eq!(db.create_capture("after restart", None).unwrap().container_id, project.id);
+    db.set_primary_project(None).unwrap();
+    assert_eq!(db.create_capture("fallback", None).unwrap().container_id, WAITING_ROOM);
+    assert_eq!(db.get_capture(&routed.id).unwrap(), routed);
+    assert_eq!(db.get_capture(&inbox.id).unwrap(), inbox);
+    let context = db.capture_context().unwrap();
+    assert_eq!(context.containers.iter().find(|c| c.id == project.id).unwrap().capture_count, 2);
+    assert_eq!(context.containers.iter().find(|c| c.id == WAITING_ROOM).unwrap().capture_count, 2);
+    drop(db);
+    assert_eq!(fixture.open().capture_context().unwrap().primary_container_id, None);
+}
+
+#[test]
+fn invalid_primary_and_empty_project_leave_routing_unchanged() {
+    let fixture = Fixture::new();
+    let db = fixture.open();
+    let project = db.create_project("Work").unwrap();
+    db.set_primary_project(Some(&project.id)).unwrap();
+    assert!(db.create_project(" \n ").is_err());
+    for invalid in ["", "missing", WAITING_ROOM] {
+        assert!(db.set_primary_project(Some(invalid)).is_err());
+        assert_eq!(db.capture_context().unwrap().primary_container_id.as_deref(), Some(project.id.as_str()));
+    }
+    assert_eq!(db.capture_context().unwrap().containers.len(), 2);
+}
+
+#[test]
+fn reassignment_changes_only_container_and_semantic_time_and_survives_restart() {
+    let fixture = Fixture::new();
+    let (original, moved, view) = {
+        let db = fixture.open();
+        let a = db.create_project("A").unwrap();
+        let b = db.create_project("B").unwrap();
+        let original = db.create_capture("keep me", None).unwrap();
+        db.conn().unwrap().execute("UPDATE captures SET extra_fields = ? WHERE id = ?",
+            params![r#"{"future":{"keep":true}}"#, original.id]).unwrap();
+        let original = db.get_capture(&original.id).unwrap();
+        let mut view = db.get_presentation(&original.id).unwrap();
+        view.width = 410.0;
+        view.opacity = 0.4;
+        db.save_presentation(&view).unwrap();
+        let mut previous = original.clone();
+        for destination in [&a.id, &b.id, WAITING_ROOM] {
+            let moved = db.reassign_capture(&original.id, destination).unwrap();
+            assert!(DateTime::parse_from_rfc3339(&moved.updated_at).unwrap() > DateTime::parse_from_rfc3339(&previous.updated_at).unwrap());
+            let mut expected = original.clone();
+            expected.container_id = destination.into();
+            expected.updated_at = moved.updated_at.clone();
+            assert_eq!(moved, expected);
+            assert_eq!(db.reassign_capture(&moved.id, destination).unwrap(), moved);
+            previous = moved;
+        }
+        for invalid in ["", "missing"] {
+            assert!(db.reassign_capture(&original.id, invalid).is_err());
+            assert_eq!(db.get_capture(&original.id).unwrap(), previous);
+        }
+        assert!(db.reassign_capture("missing", WAITING_ROOM).is_err());
+        assert_eq!(db.get_presentation(&original.id).unwrap(), view);
+        (original, previous, view)
+    };
+    let db = fixture.open();
+    assert_eq!(db.get_capture(&original.id).unwrap(), moved);
+    assert_eq!(db.get_presentation(&original.id).unwrap(), view);
+}
+
+#[test]
+fn text_autosave_and_reassignment_do_not_overwrite_each_others_fields() {
+    let fixture = Fixture::new();
+    let db = fixture.open();
+    let project = db.create_project("Destination").unwrap();
+    let original = db.create_capture("initial", None).unwrap();
+    let moved = db.reassign_capture(&original.id, &project.id).unwrap();
+    let saved = db.edit_capture_text(&original.id, "unsaved editor buffer", Some("title")).unwrap();
+    assert_eq!(saved.container_id, project.id);
+    assert_ne!(saved.updated_at, moved.updated_at);
+    let returned = db.reassign_capture(&original.id, WAITING_ROOM).unwrap();
+    assert_eq!(returned.content, "unsaved editor buffer");
+    assert_eq!(returned.title.as_deref(), Some("title"));
+    assert_eq!(returned.id, original.id);
+    assert_eq!(returned.created_at, original.created_at);
+    assert_eq!(db.edit_capture_text(&original.id, &returned.content, returned.title.as_deref()).unwrap(), returned);
+}
+
+#[test]
+fn additive_routing_migration_preserves_phase_two_data_and_presentation() {
+    let fixture = Fixture::new();
+    let (record, view) = {
+        let db = fixture.open();
+        let record = db.create_capture("Phase 2", None).unwrap();
+        let view = db.get_presentation(&record.id).unwrap();
+        db.save_presentation(&view).unwrap();
+        // A Phase 2 database has these same tables without capture_routing.
+        db.conn().unwrap().execute_batch("DROP TABLE capture_routing;").unwrap();
+        (record, view)
+    };
+    let db = fixture.open();
+    assert_eq!(db.get_capture(&record.id).unwrap(), record);
+    assert_eq!(db.get_presentation(&record.id).unwrap(), view);
+    assert_eq!(db.capture_context().unwrap().primary_container_id, None);
+    assert_eq!(db.create_capture("new", None).unwrap().container_id, WAITING_ROOM);
+}
+
+#[test]
 fn creates_conforming_waiting_room_records_and_survives_restart() {
     let fixture = Fixture::new();
     let record = {

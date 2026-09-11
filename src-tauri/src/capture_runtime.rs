@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Mutex, time::Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{captures::{Capture, Presentation, WAITING_ROOM}, foreground, hotkeys, Database, Note};
+use crate::{captures::{Capture, CaptureContext, Container, Presentation, WAITING_ROOM}, foreground, hotkeys, Database, Note};
 
 pub struct CaptureRuntime(pub Mutex<Runtime>);
 
@@ -296,8 +296,34 @@ pub async fn set_anchor_expanded(app: AppHandle, expanded: bool, focused: bool, 
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn list_captures(app: AppHandle) -> Result<Vec<Capture>, String> {
-    app.state::<Database>().list_captures(WAITING_ROOM).map_err(|e| e.to_string())
+pub async fn list_captures(app: AppHandle, container_id: Option<String>) -> Result<Vec<Capture>, String> {
+    app.state::<Database>().list_captures(container_id.as_deref().unwrap_or(WAITING_ROOM)).map_err(|e| e.to_string())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_capture_context(app: AppHandle) -> Result<CaptureContext, String> {
+    app.state::<Database>().capture_context().map_err(|e| e.to_string())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_project(app: AppHandle, name: String) -> Result<Container, String> {
+    let project = app.state::<Database>().create_project(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("containers-changed", ());
+    Ok(project)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_primary_project(app: AppHandle, id: Option<String>) -> Result<(), String> {
+    app.state::<Database>().set_primary_project(id.as_deref()).map_err(|e| e.to_string())?;
+    let _ = app.emit("containers-changed", ());
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn reassign_capture(app: AppHandle, id: String, container_id: String) -> Result<Capture, String> {
+    let capture = app.state::<Database>().reassign_capture(&id, &container_id).map_err(|e| e.to_string())?;
+    let _ = app.emit("captures-changed", ());
+    Ok(capture)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -361,8 +387,7 @@ pub async fn show_editor(app: AppHandle, id: String) -> Result<Presentation, Str
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_capture_edit(app: AppHandle, id: String, content: String, title: Option<String>, dismiss: bool) -> Result<Capture, String> {
     let db = app.state::<Database>();
-    let existing = db.get_capture(&id).map_err(|e| e.to_string())?;
-    let record = db.edit_capture(&id, &content, title.as_deref(), &existing.container_id).map_err(|e| e.to_string())?;
+    let record = db.edit_capture_text(&id, &content, title.as_deref()).map_err(|e| e.to_string())?;
     let state = runtime(&app);
     let (active_editor, previous_window) = {
         let state = state.0.lock().map_err(|_| "Capture state unavailable")?;
