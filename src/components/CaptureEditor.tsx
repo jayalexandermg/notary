@@ -94,7 +94,7 @@ export default function CaptureEditor() {
   }
 
   if (!record) return <div className="editor-empty" role="status">{message}</div>;
-  return <main className="capture-editor note-card" style={{ opacity: view?.opacity ?? 0.95 }}
+  return <main className="capture-editor ht-surface"
     onKeyDown={event => {
       if (event.nativeEvent.isComposing) return;
       if (event.key === 'Escape') { event.preventDefault(); void dismiss(); }
@@ -105,17 +105,16 @@ export default function CaptureEditor() {
         onMouseDown={event => { if (event.button === 0) void getCurrentWindow().startDragging().catch(reason => setMessage(String(reason))); }}>⠿</button>
       <input aria-label="Thought title" placeholder="Untitled thought" value={record.title || ''} readOnly={busy}
         onChange={event => edit(record.content, event.target.value || undefined)} />
-      <button aria-label="Save and close thought" title="Save and close (Esc)" disabled={busy} onClick={() => void dismiss()}>×</button>
+      <button className="surface-close" aria-label="Save and close thought" title="Save and close (Esc)" disabled={busy} onClick={() => void dismiss()}>×</button>
     </header>
     <textarea ref={input} aria-label="Thought content" value={record.content} readOnly={busy} spellCheck
       onChange={event => edit(event.target.value, record.title)} />
     <footer className="capture-editor-footer">
+      <span className="surface-destination"><span className="surface-pip" aria-hidden="true" />{record.container_id === 'waiting-room' ? 'Waiting Room' : record.container_id}</span>
       <span role="status">{message}</span>
       <div className="presentation-controls">
         <button title="Keep above other windows" aria-label="Keep above other windows" aria-pressed={view?.always_on_top ?? true}
           onClick={() => void presentation(view?.opacity ?? 0.95, !view?.always_on_top)}>Pin</button>
-        <label>Opacity <input type="range" aria-label="Thought opacity" min="0.1" max="1" step="0.05" value={view?.opacity ?? 0.95}
-          onChange={event => void presentation(Number(event.target.value), view?.always_on_top ?? true)} /></label>
       </div>
       <button className="editor-resize" title="Resize" aria-label="Resize thought"
         onMouseDown={() => void getCurrentWindow().startResizeDragging('SouthEast').catch(reason => setMessage(String(reason)))}>◢</button>

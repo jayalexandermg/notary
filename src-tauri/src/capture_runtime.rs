@@ -71,7 +71,7 @@ fn sample(state: &mut Runtime, boundary: &str, elapsed: f64) {
 }
 
 pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
-    for (label, width, height) in [("capture", 680.0, 180.0), ("anchor", 24.0, 48.0), ("editor", 560.0, 380.0)] {
+    for (label, width, height) in [("capture", 432.0, 80.0), ("anchor", 24.0, 48.0), ("editor", 330.0, 222.0)] {
         let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
             .title(match label { "capture" => "HoverThought Quick Capture", "editor" => "HoverThought Capture", _ => "HoverThought" })
             .decorations(false).transparent(true).shadow(false).always_on_top(true)
@@ -125,8 +125,8 @@ fn place_capture(window: &WebviewWindow) -> Result<(), String> {
         .or(window.primary_monitor().map_err(|e| e.to_string())?).ok_or("No monitor is available")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let width = 680.0_f64.min(area.size.width as f64 / scale);
-    let height = 180.0_f64.min(area.size.height as f64 / scale);
+    let width = 432.0_f64.min(area.size.width as f64 / scale);
+    let height = 80.0_f64.min(area.size.height as f64 / scale);
     window.set_size(tauri::LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
     window.set_position(tauri::PhysicalPosition::new(
         area.position.x + ((area.size.width as f64 - width * scale) / 2.0) as i32,

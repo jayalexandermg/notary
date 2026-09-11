@@ -1,15 +1,70 @@
-/* Reuse HoverThought's existing note palette. The mock supplies behavior only. */
+/* Retrieval retains its existing palette; B2 tokens are scoped to the two active surfaces. */
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .55; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-.quick-capture { height: 100%; border-radius: 12px; display: flex; flex-direction: column; padding: 18px 22px 10px; }
-.quick-capture textarea { resize: none; flex: 1; width: 100%; min-height: 0; background: transparent; outline: none; color: var(--note-text); font-size: 20px; line-height: 1.5; }
-.quick-capture footer { display: flex; gap: 8px; justify-content: space-between; align-items: center; border-top: 1px solid var(--note-border); padding-top: 7px; font-size: 12px; }
-.quick-capture footer span { opacity: .65; }
-.quick-capture button, .capture-editor-header button { width: 28px; height: 28px; flex-shrink: 0; border-radius: 5px; font-size: 21px; }
-.quick-capture button:hover, .capture-editor button:hover { background: var(--button-hover); }
+.ht-surface {
+  --surface: #121212;
+  --surface-top: #181818;
+  --rim: rgba(255,217,102,.40);
+  --rim-hot: rgba(255,217,102,.72);
+  --inner-glow: rgba(255,200,70,.13);
+  --hairline: rgba(255,255,255,.07);
+  --text: #EDEDED;
+  --text-dim: #8d8d8d;
+  --text-faint: #5c5c5c;
+  --gold: #FFD966;
+  --gold-soft: #F5E6A3;
+  --accent: var(--gold);
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(120% 70% at 50% -12%, var(--inner-glow) 0%, transparent 62%),
+    linear-gradient(175deg,var(--surface-top) 0%,var(--surface) 58%);
+  border: 1px solid var(--rim);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 20px rgba(255,200,70,.09),
+    inset 0 1px 0 rgba(255,225,150,.10),
+    inset 0 -14px 22px rgba(0,0,0,.35);
+}
+.ht-surface::before {
+  content: '';
+  position: absolute;
+  left: 11%; right: 11%; top: 0; height: 1px;
+  background: linear-gradient(90deg,transparent,var(--rim-hot),transparent);
+  pointer-events: none;
+}
+.ht-surface::after {
+  content: ''; position: absolute; inset: 1px; border-radius: 11px; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255,217,102,.07);
+}
+.ht-surface > * { position: relative; z-index: 1; }
+.ht-surface .surface-close {
+  width: 18px; height: 18px; flex: none;
+  border: 1px solid rgba(255,255,255,.1);
+  background: none; border-radius: 4px; color: #6a6a6a;
+  font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; font-family: inherit;
+  transition: color .14s,border-color .14s,background .14s;
+}
+.ht-surface .surface-close:hover { color: var(--gold-soft); border-color: var(--rim); background: rgba(255,217,102,.07); }
+.surface-destination { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.surface-pip { width: 3px; height: 3px; flex: none; border-radius: 50%; background: var(--gold); box-shadow: 0 0 5px var(--gold); }
+.quick-capture { padding: 11px 13px 7px; }
+.quick-capture textarea { resize: none; flex: 1; width: 100%; min-height: 0; background: transparent; outline: none; color: var(--text); font-size: 11.5px; line-height: 1.5; overflow: auto; }
+.quick-capture textarea::placeholder { color: #4e4e4e; opacity: 1; }
+.quick-capture footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hairline); flex: none; }
+.quick-capture .capture-hint { min-width: 0; font-size: 8.5px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.capture-hint b { color: var(--text-dim); font-weight: 500; }
+.quick-capture .surface-destination { font-size: 8px; color: var(--gold-soft); opacity: .75; gap: 4px; }
 
 .ambient-root { width: 100%; height: 100%; position: relative; color: var(--note-text); font-size: 13px; }
 .ambient-mark { position: absolute; left: 0; top: calc(50% - 24px); width: 24px; height: 48px; border-radius: 0 6px 6px 0; opacity: .35; font-weight: 650; font-size: 12px; transition: opacity 120ms ease; }
@@ -37,18 +92,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .capture-shortcut button { padding: 7px; border-radius: 5px; background: var(--titlebar-bg); }
 .capture-error { padding: 9px 5px; color: #9a3412; font-size: 11px; overflow-wrap: anywhere; }
 
-.capture-editor { display: flex; flex-direction: column; height: 100%; border-radius: 10px; overflow: hidden; }
-.capture-editor-header { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-bottom: 1px solid var(--note-border); background: var(--titlebar-bg); }
-.capture-editor-header .drag-grip { cursor: grab; opacity: .5; font-size: 18px; }
-.capture-editor-header input { min-width: 0; flex: 1; outline: none; background: transparent; font-size: 14px; font-weight: 600; }
-.capture-editor > textarea { background: transparent; color: var(--note-text); outline: none; resize: none; flex: 1; width: 100%; min-height: 0; padding: 16px 20px; font-size: 15px; line-height: 1.65; }
-.capture-editor-footer { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 10px; border-top: 1px solid var(--note-border); font-size: 11px; }
-.capture-editor-footer > span { flex: 1; opacity: .65; overflow-wrap: anywhere; }
-.presentation-controls { display: flex; align-items: center; gap: 10px; opacity: .15; transition: opacity 120ms; }
+.capture-editor { padding: 13px 14px 8px; }
+.capture-editor-header { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 9px; flex: none; }
+.capture-editor-header .drag-grip { cursor: grab; color: var(--text-faint); font-size: 12px; }
+.capture-editor-header input { min-width: 0; flex: 1; outline: none; background: transparent; font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.capture-editor-header input::placeholder { color: var(--text-dim); opacity: 1; }
+.capture-editor > textarea { background: transparent; color: #a4a4a4; outline: none; resize: none; flex: 1; width: 100%; min-height: 0; font-size: 11px; line-height: 1.65; overflow: auto; }
+.capture-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--hairline); font-size: 8.5px; color: var(--text-faint); flex: none; white-space: nowrap; }
+.capture-editor-footer > [role=status] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.capture-editor .surface-pip { opacity: .85; }
+.presentation-controls { display: flex; align-items: center; opacity: .15; transition: opacity 120ms; }
 .capture-editor-footer:hover .presentation-controls, .presentation-controls:focus-within { opacity: .8; }
 .presentation-controls button { padding: 3px; border-radius: 4px; }
-.presentation-controls label { display: flex; align-items: center; gap: 6px; }
-.presentation-controls input { width: 65px; }
+.capture-editor .presentation-controls button:hover { color: var(--gold-soft); background: rgba(255,217,102,.07); }
 .editor-resize { cursor: se-resize; opacity: .4; }
 .editor-empty { font-size: 13px; }
-@media (prefers-reduced-motion: reduce) { .ambient-mark, .presentation-controls { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ambient-mark, .presentation-controls, .ht-surface .surface-close { transition: none; } }

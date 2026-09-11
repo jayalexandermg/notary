@@ -85,7 +85,7 @@ export function QuickCapture() {
     }
   }
 
-  return <main className="quick-capture note-card" aria-label="Quick Capture">
+  return <main className="quick-capture ht-surface" aria-label="Quick Capture">
     <textarea ref={input} aria-label="Capture a thought" autoFocus spellCheck
       placeholder="What's on your mind?" value={text} readOnly={pending}
       onChange={event => { content.current = event.target.value; setText(event.target.value); }}
@@ -95,8 +95,9 @@ export function QuickCapture() {
         if (event.key === 'Escape') { event.preventDefault(); void discard(); }
       }} />
     <footer>
-      <span role="status">{error || (pending ? 'Saving…' : 'Enter to save · Shift+Enter for a new line · Esc to discard')}</span>
-      <button aria-label="Discard draft" title="Discard draft (Esc)" onClick={() => void discard()} disabled={pending}>×</button>
+      <span className="capture-hint" role="status">{error || (pending ? 'Saving…' : <><b>Enter</b> save · <b>Shift+Enter</b> newline · <b>Esc</b> discard</>)}</span>
+      <span className="surface-destination"><span className="surface-pip" aria-hidden="true" />Waiting Room</span>
+      <button className="surface-close" aria-label="Discard draft" title="Discard draft (Esc)" onClick={() => void discard()} disabled={pending}>×</button>
     </footer>
   </main>;
 }
