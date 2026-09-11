@@ -10,7 +10,7 @@ Phase 4 conditions: native Windows debug binary with Vite, isolated test databas
 
 The phase2-prepared/final/confirmed logs are the accepted 13-sample Phase 2 set; phase2-native/profile/async are earlier development failures. gutter-trial logs belong to the abandoned gutter experiments. inward logs include the retained 128.9790ms failure. phase3 logs contain all 14 Phase 3 samples.
 
-Raw sources are under the local ignored `.reforge-evidence/` directory. Values below preserve the JSON numeric values, including floating-point representation; no per-phase reset or discarded slow sample.
+Raw sources are under the local ignored `.reforge-evidence/` directory. Values below preserve the JSON numeric values, including floating-point representation; no per-phase reset or discarded slow sample. Future phase closeouts must preserve these rows and append new events, even if an older local source log is no longer available. Do not rebuild this ledger from only the newest run.
 
 | Source log | Line | Sequence | Milliseconds | Result |
 |---|---:|---:|---:|---|
