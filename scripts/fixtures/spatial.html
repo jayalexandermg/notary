@@ -1,0 +1,52 @@
+<!doctype html><html><head><title>Phase 4 navigation regression fixture — simulated IPC</title></head><body><div id="root"></div>
+<script>
+const callbacks = new Map(), listeners = new Map(); let counter = 0;
+const label = new URLSearchParams(location.search).get('surface') || 'capture';
+const seed = {id:'019a0123-4567-789a-8abc-123456789abc',type:'capture',schema_version:'1.0',created_at:'2026-09-10T04:00:00-07:00',updated_at:'2026-09-10T04:00:00-07:00',source:'hoverthought/quick-capture',content:'Reference thought',container_id:'waiting-room',future_field:{keep:true}};
+window.mock = {calls:[],records:[seed],containers:[{id:'waiting-room',name:'Waiting Room',kind:'waiting_room'},{id:'work',name:'Work',kind:'project'}],primary:null,failCommit:false,failSave:false,failMove:false,failContext:false,emit(event,payload){for(const [id,sub] of listeners)if(sub.event===event)callbacks.get(sub.handler)?.({event,id,payload});}};
+window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener(event,id){listeners.delete(id);}};
+window.__TAURI_INTERNALS__={metadata:{currentWindow:{label},currentWebview:{label}},transformCallback(cb){const id=++counter;callbacks.set(id,cb);return id;},unregisterCallback(id){callbacks.delete(id);},invoke:async(command,args={})=>{
+ mock.calls.push({command,args});
+ if(command==='plugin:event|listen'){const id=++counter;listeners.set(id,args);return id;}
+ if(command==='plugin:event|unlisten'){listeners.delete(args.eventId);return;}
+ if(command==='get_capture_context'){if(mock.failContext)throw 'Context unavailable'; return {containers:mock.containers.map(c=>({...c,capture_count:mock.records.filter(r=>r.container_id===c.id).length})),primary_container_id:mock.primary};}
+ if(command==='create_project'){const c={id:'project-'+(++counter),name:args.name.trim(),kind:'project',parent_id:args.parent_id,capture_count:0};mock.containers.push(c);mock.emit('containers-changed');return c;}
+ if(command==='set_primary_project'){mock.primary=args.id;mock.emit('containers-changed');return;}
+ if(command==='capture_surface_ready')return {sequence:1,active:true};
+ if(command==='commit_capture'){await new Promise(r=>setTimeout(r,80));if(mock.failCommit)throw 'Disk write failed';const saved={...seed,id:'capture-'+(++counter),content:args.content,container_id:mock.primary||'waiting-room'};mock.records.push(saved);mock.emit('captures-changed');return saved;}
+ if(command==='list_captures'){await new Promise(r=>setTimeout(r,mock.delays?.[args.container_id]||0));return structuredClone(mock.records.filter(r=>r.container_id===(args.container_id||'waiting-room')));}
+ if(command==='list_legacy_notes')return [];
+ if(command==='get_capture_shortcut')return {binding:'Ctrl+Alt+Shift+H',registered:true,error:null};
+ if(command==='pending_editor')return label==='editor'?seed.id:null;
+ if(command==='get_capture')return structuredClone(mock.records.find(x=>x.id===args.id));
+ if(command==='show_editor')return {record_id:args.id,device_id:'local',pos_x:100,pos_y:100,width:330,height:222,is_open:true,is_minimized:false,opacity:.95,always_on_top:true};
+ if(command==='save_capture_edit'){if(mock.failSave)throw 'Save failed';const old=mock.records.find(r=>r.id===args.id);const saved={...old,content:args.content,title:args.title||undefined};mock.records=mock.records.map(r=>r.id===args.id?saved:r);return saved;}
+ if(command==='reassign_capture'){if(mock.failMove)throw 'Move failed';const old=mock.records.find(r=>r.id===args.id);const saved={...old,container_id:args.container_id};mock.records=mock.records.map(r=>r.id===args.id?saved:r);mock.emit('captures-changed');return saved;}
+ return null;
+}};
+</script>
+<script>
+mock.containers = [
+ {id:'waiting-room',name:'Waiting Room',kind:'waiting_room',parent_id:null},
+ {id:'coding',name:'Coding',kind:'project',parent_id:null},
+ {id:'personal',name:'Personal',kind:'project',parent_id:null},
+ {id:'notary',name:'Notary',kind:'project',parent_id:'coding'},
+ {id:'other',name:'Other',kind:'project',parent_id:'coding'},
+ {id:'nav',name:'Navigation',kind:'project',parent_id:'notary'},
+ {id:'storage',name:'Storage',kind:'project',parent_id:'notary'},
+ {id:'deep',name:'Deep context',kind:'project',parent_id:'nav'},
+ {id:'deeper',name:'Deeper context',kind:'project',parent_id:'deep'}
+];
+mock.records = [
+ {...seed,id:'thought-b',content:'Capture B\n'+('Long preview line\n'.repeat(50)),container_id:'deeper'},
+ {...seed,id:'thought-d',content:'Capture D',container_id:'deeper'},
+ {...seed,id:'storage-note',content:'Storage note',container_id:'storage'}
+];
+for(let n=0;n<12;n++)mock.records.push({...seed,id:'sibling-'+n,content:'Extra sibling '+n,container_id:'deeper'});
+mock.delays = {};
+</script>
+<script type="module">
+import RefreshRuntime from '/@react-refresh';
+RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{}; window.$RefreshSig$=()=>type=>type; window.__vite_plugin_react_preamble_installed__=true;
+await import('/src/main.tsx');
+</script></body></html>

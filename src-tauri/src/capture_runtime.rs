@@ -306,8 +306,8 @@ pub async fn get_capture_context(app: AppHandle) -> Result<CaptureContext, Strin
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn create_project(app: AppHandle, name: String) -> Result<Container, String> {
-    let project = app.state::<Database>().create_project(&name).map_err(|e| e.to_string())?;
+pub async fn create_project(app: AppHandle, name: String, parent_id: Option<String>) -> Result<Container, String> {
+    let project = app.state::<Database>().create_project_in(&name, parent_id.as_deref()).map_err(|e| e.to_string())?;
     let _ = app.emit("containers-changed", ());
     Ok(project)
 }

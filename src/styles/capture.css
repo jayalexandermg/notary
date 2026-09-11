@@ -117,3 +117,26 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .editor-move > div { display: flex; gap: 8px; }
 .editor-move p { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .ambient-mark, .presentation-controls, .ht-surface .surface-close { transition: none; } }
+
+/* Phase 4 functional geometry. Both slots reserve their full space at all depths. */
+.spatial-panel { display: grid; grid-template-rows: 32px minmax(0, 1fr) 32px 18px; gap: 4px; }
+.spatial-path { display: grid; grid-template-columns: 28px 28px minmax(0, 1fr) 24px; gap: 4px; align-items: stretch; }
+.spatial-path button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--note-border); border-radius: 4px; }
+.spatial-content { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.spatial-slot { min-height: 0; display: grid; grid-template-rows: 23px minmax(0, 1fr); border-top: 1px solid var(--note-border); overflow: hidden; }
+.spatial-heading { font-size: 11px; padding: 3px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-rows { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; min-height: 0; }
+.spatial-rows > button { width: 100%; height: 38px; display: flex; align-items: center; gap: 6px; padding: 5px; text-align: left; }
+.spatial-rows > button:hover, .spatial-rows > button:focus-visible { background: var(--button-hover); }
+.spatial-rows > button > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-rows small { font-size: 10px; flex: none; }
+.spatial-preview { overflow: auto; padding: 4px 5px; min-height: 0; font-size: 12px; }
+.spatial-preview p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.spatial-preview small { display: block; font-size: 10px; padding-top: 6px; }
+.spatial-preview button, .spatial-form button { border: 1px solid var(--note-border); padding: 4px; margin-top: 4px; }
+.spatial-controls { display: flex; gap: 4px; align-items: stretch; font-size: 10px; overflow: hidden; }
+.spatial-controls button { flex: 1; min-width: 0; border: 1px solid var(--note-border); border-radius: 4px; padding: 2px; }
+.spatial-controls button:last-child { flex: 0 0 24px; }
+.spatial-error { height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.spatial-form { overflow: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px; font-size: 11px; }
+.spatial-form input { min-width: 0; width: 100%; padding: 4px; border: 1px solid var(--note-border); background: transparent; }

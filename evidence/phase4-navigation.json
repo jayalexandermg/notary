@@ -1,0 +1,273 @@
+{
+  "checkpoint": "2026-09-10 Phase 4",
+  "browser": [
+    {
+      "name": "hover target and siblings stay fixed: coding",
+      "result": "PASS",
+      "slot": "0",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: notary",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: nav",
+      "result": "PASS",
+      "slot": "0",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: deep",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: deeper",
+      "result": "PASS",
+      "slot": "0",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "five context depths use only two fixed slots",
+      "result": "PASS",
+      "footprint": {
+        "x": 27.993696212768555,
+        "y": 0,
+        "width": 322.25837898254395,
+        "height": 420.16802978515625
+      }
+    },
+    {
+      "name": "hover target and siblings stay fixed: thought-b",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: thought-d",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "lateral capture B to D and click engagement",
+      "result": "PASS"
+    },
+    {
+      "name": "hover target and siblings stay fixed: sibling-10",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "scroll position retained through preview changes",
+      "result": "PASS"
+    },
+    {
+      "name": "hover target and siblings stay fixed: notary",
+      "result": "PASS",
+      "slot": "0",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: nav",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "hover target and siblings stay fixed: storage",
+      "result": "PASS",
+      "slot": "1",
+      "maximumCoordinateDelta": 0
+    },
+    {
+      "name": "compressed ancestors stay interactive and siblings are directly accessible",
+      "result": "PASS"
+    },
+    {
+      "name": "late child response cannot overwrite a newer sibling",
+      "result": "PASS"
+    },
+    {
+      "name": "native geometry requests independent of hover/depth",
+      "result": "PASS",
+      "calls": [
+        {
+          "command": "set_anchor_expanded",
+          "args": {
+            "expanded": false,
+            "focused": false,
+            "height": 420
+          }
+        },
+        {
+          "command": "set_anchor_expanded",
+          "args": {
+            "expanded": true,
+            "focused": false,
+            "height": 420
+          }
+        },
+        {
+          "command": "set_anchor_expanded",
+          "args": {
+            "expanded": true,
+            "focused": true,
+            "height": 420
+          }
+        }
+      ]
+    },
+    {
+      "name": "minimal child creation uses explicit parent",
+      "result": "PASS"
+    },
+    {
+      "name": "close returns to ambient",
+      "result": "PASS"
+    }
+  ],
+  "native": {
+    "method": "Real Windows Sky pointer movement and clicks; read-only DOM/native-window snapshots. Source snapshots remain in local .reforge-evidence/phase4-*.json. Zero-delta native scroll positioned the pointer and actual :hover was checked. This is not a simulated native input claim.",
+    "scale": 1.25,
+    "devicePixelRatio": 1.4875000715255737,
+    "hoverComparisons": [
+      {
+        "before": "root",
+        "after": "coding",
+        "sourceSlot": "0",
+        "rowCount": 3,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "coding",
+        "after": "notary",
+        "sourceSlot": "1",
+        "rowCount": 1,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "notary",
+        "after": "navigation",
+        "sourceSlot": "0",
+        "rowCount": 2,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "navigation",
+        "after": "storage",
+        "sourceSlot": "0",
+        "rowCount": 2,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "navigation",
+        "after": "deep",
+        "sourceSlot": "1",
+        "rowCount": 1,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "deep",
+        "after": "deeper",
+        "sourceSlot": "0",
+        "rowCount": 1,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "deeper",
+        "after": "preview-b",
+        "sourceSlot": "1",
+        "rowCount": 2,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      },
+      {
+        "before": "preview-b",
+        "after": "preview-d",
+        "sourceSlot": "1",
+        "rowCount": 2,
+        "coordinateDelta": 0,
+        "nativeSize": {
+          "width": 438,
+          "height": 525
+        },
+        "nativePosition": {
+          "x": 0,
+          "y": 277
+        },
+        "result": "PASS"
+      }
+    ],
+    "engagementObserved": "Native D opened in HoverThought Capture after its row was hovered and clicked; Escape returned to the anchor.",
+    "compressedControlsObserved": "Native ancestor button showed Coding/Notary/Navigation; current-context button jumped directly to Navigation/Storage.",
+    "limitations": "One Windows environment, no multi-monitor or cross-platform native UI claim. One coordinate click after editor return collapsed the reveal; refreshing native focus/accessibility allowed the subsequent interaction. This failed attempt is not counted as a successful click."
+  }
+}

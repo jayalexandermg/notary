@@ -16,6 +16,7 @@ pub struct Container {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub parent_id: Option<String>,
     pub capture_count: i64,
 }
 
@@ -178,12 +179,13 @@ impl Database {
     pub fn capture_context(&self) -> rusqlite::Result<CaptureContext> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT c.id, c.name, c.kind, COUNT(r.id) FROM containers c
+            "SELECT c.id, c.name, c.kind, COUNT(r.id), c.parent_id FROM containers c
              LEFT JOIN captures r ON r.container_id = c.id GROUP BY c.id
              ORDER BY CASE c.kind WHEN 'waiting_room' THEN 0 ELSE 1 END, c.name COLLATE NOCASE, c.id"
         )?;
         let containers = stmt.query_map([], |row| Ok(Container {
             id: row.get(0)?, name: row.get(1)?, kind: row.get(2)?, capture_count: row.get(3)?,
+            parent_id: row.get(4)?,
         }))?.collect::<rusqlite::Result<Vec<_>>>()?;
         let primary_container_id = conn.query_row(
             "SELECT c.id FROM capture_routing r JOIN containers c ON c.id = r.primary_container_id
@@ -193,13 +195,27 @@ impl Database {
     }
 
     pub fn create_project(&self, name: &str) -> rusqlite::Result<Container> {
+        self.create_project_in(name, None)
+    }
+
+    pub fn create_project_in(&self, name: &str, parent_id: Option<&str>) -> rusqlite::Result<Container> {
         let name = name.trim();
         if name.is_empty() { return Err(error("A project needs a name")); }
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        if let Some(parent) = parent_id {
+            let valid: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM containers WHERE id = ? AND kind = 'project')", [parent], |row| row.get(0))?;
+            if !valid { return Err(error("Parent must be an existing project")); }
+        }
+        // Only newly generated IDs can become children; no reparenting path can
+        // introduce a cycle or change existing captures' membership/history.
         let project = Container {
             id: Uuid::now_v7().to_string(), name: name.into(), kind: "project".into(), capture_count: 0,
+            parent_id: parent_id.map(str::to_owned),
         };
-        self.conn()?.execute("INSERT INTO containers(id, name, kind) VALUES (?, ?, 'project')",
-            params![project.id, project.name])?;
+        tx.execute("INSERT INTO containers(id, name, kind, parent_id) VALUES (?, ?, 'project', ?)",
+            params![project.id, project.name, project.parent_id])?;
+        tx.commit()?;
         Ok(project)
     }
 

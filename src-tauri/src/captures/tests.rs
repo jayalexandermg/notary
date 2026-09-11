@@ -13,6 +13,38 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn nested_contexts_preserve_membership_routing_and_history_across_restart() {
+    let fixture = Fixture::new();
+    let (root, child, sibling, record) = {
+        let db = fixture.open();
+        let root = db.create_project("Coding").unwrap();
+        let child = db.create_project_in("Notary", Some(&root.id)).unwrap();
+        let sibling = db.create_project_in("Other", Some(&root.id)).unwrap();
+        let deep = db.create_project_in("Navigation", Some(&child.id)).unwrap();
+        db.set_primary_project(Some(&deep.id)).unwrap();
+        let record = db.create_capture("deep thought", None).unwrap();
+        assert_eq!(record.container_id, deep.id);
+        assert!(db.list_captures(&root.id).unwrap().is_empty());
+        assert!(db.list_captures(&child.id).unwrap().is_empty());
+        assert_eq!(db.list_captures(&deep.id).unwrap(), vec![record.clone()]);
+        assert!(db.create_project_in("invalid", Some(WAITING_ROOM)).is_err());
+        assert!(db.create_project_in("invalid", Some("missing")).is_err());
+        assert!(db.create_project_in(" ", Some(&root.id)).is_err());
+        assert_eq!(db.capture_context().unwrap().containers.len(), 5);
+        assert_eq!(db.get_capture(&record.id).unwrap(), record);
+        (root, child, sibling, record)
+    };
+    let db = fixture.open();
+    let context = db.capture_context().unwrap();
+    assert_eq!(context.containers.iter().find(|c| c.id == root.id).unwrap().parent_id, None);
+    for id in [child.id, sibling.id] {
+        assert_eq!(context.containers.iter().find(|c| c.id == id).unwrap().parent_id.as_deref(), Some(root.id.as_str()));
+    }
+    assert_eq!(db.get_capture(&record.id).unwrap(), record);
+    assert_eq!(context.primary_container_id.as_deref(), Some(record.container_id.as_str()));
+}
+
+#[test]
 fn primary_routing_persists_and_unset_falls_back_without_moving_existing_captures() {
     let fixture = Fixture::new();
     let (project, inbox, routed) = {

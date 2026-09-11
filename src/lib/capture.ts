@@ -28,7 +28,7 @@ export interface Presentation {
 }
 
 export interface CaptureSession { sequence: number; active: boolean }
-export interface Container { id: string; name: string; kind: 'waiting_room' | 'project'; capture_count: number }
+export interface Container { id: string; name: string; kind: 'waiting_room' | 'project'; capture_count: number; parent_id: string | null }
 export interface CaptureContext { containers: Container[]; primary_container_id: string | null }
 export interface ShortcutStatus { binding: string; registered: boolean; error: string | null }
 export interface LegacyNote { id: string; title: string; content: string; created_at: string }
@@ -42,7 +42,7 @@ export const api = {
   expand: (expanded: boolean, focused = false, height?: number) => invoke<void>('set_anchor_expanded', { expanded, focused, height }),
   list: (container_id = 'waiting-room') => invoke<Capture[]>('list_captures', { container_id }),
   context: () => invoke<CaptureContext>('get_capture_context'),
-  createProject: (name: string) => invoke<Container>('create_project', { name }),
+  createProject: (name: string, parent_id: string | null = null) => invoke<Container>('create_project', { name, parent_id }),
   setPrimary: (id: string | null) => invoke<void>('set_primary_project', { id }),
   reassign: (id: string, container_id: string) => invoke<Capture>('reassign_capture', { id, container_id }),
   legacy: () => invoke<LegacyNote[]>('list_legacy_notes'),
