@@ -27,6 +27,7 @@ pub struct CaptureContext {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "CaptureFields")]
 pub struct Capture {
     pub id: String,
     #[serde(rename = "type")]
@@ -34,6 +35,8 @@ pub struct Capture {
     pub schema_version: String,
     pub created_at: String,
     pub updated_at: String,
+    pub deleted_at: Option<String>,
+    pub lifecycle_at: String,
     pub source: String,
     pub content: String,
     pub container_id: String,
@@ -43,6 +46,64 @@ pub struct Capture {
     pub derived_from: Option<String>,
     #[serde(flatten)]
     pub extra_fields: BTreeMap<String, Value>,
+}
+
+// Only legacy 1.0 readers may supply the lifecycle defaults. New records must
+// carry an explicit, non-null lifecycle timestamp; unknown fields still round-trip.
+#[derive(Deserialize)]
+struct CaptureFields {
+    id: String,
+    #[serde(rename = "type")]
+    record_type: String,
+    schema_version: String,
+    created_at: String,
+    updated_at: String,
+    #[serde(default, deserialize_with = "read_deleted_at")]
+    deleted_at: Option<Option<String>>,
+    #[serde(default, deserialize_with = "read_lifecycle_at")]
+    lifecycle_at: Option<String>,
+    source: String,
+    content: String,
+    container_id: String,
+    title: Option<String>,
+    derived_from: Option<String>,
+    #[serde(flatten)]
+    extra_fields: BTreeMap<String, Value>,
+}
+
+fn read_deleted_at<'de, D: serde::Deserializer<'de>>(reader: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(reader).map(Some)
+}
+
+fn read_lifecycle_at<'de, D: serde::Deserializer<'de>>(reader: D) -> Result<Option<String>, D::Error> {
+    String::deserialize(reader).map(Some)
+}
+
+impl TryFrom<CaptureFields> for Capture {
+    type Error = &'static str;
+    fn try_from(fields: CaptureFields) -> Result<Self, Self::Error> {
+        let deleted_at = match fields.deleted_at {
+            Some(value) => value,
+            None if fields.schema_version == "1.0" => None,
+            None => return Err("deleted_at is required (null when live)"),
+        };
+        let lifecycle_at = match fields.lifecycle_at {
+            Some(value) => value,
+            None if fields.schema_version == "1.0" => fields.created_at.clone(),
+            None => return Err("lifecycle_at is required"),
+        };
+        DateTime::parse_from_rfc3339(&lifecycle_at).map_err(|_| "Invalid lifecycle_at")?;
+        if let Some(value) = deleted_at.as_deref() {
+            DateTime::parse_from_rfc3339(value).map_err(|_| "Invalid deleted_at")?;
+        }
+        Ok(Self {
+            id: fields.id, record_type: fields.record_type, schema_version: fields.schema_version,
+            created_at: fields.created_at, updated_at: fields.updated_at,
+            deleted_at, lifecycle_at, source: fields.source,
+            content: fields.content, container_id: fields.container_id, title: fields.title,
+            derived_from: fields.derived_from, extra_fields: fields.extra_fields,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,12 +145,12 @@ fn error(message: impl ToString) -> rusqlite::Error {
     )))
 }
 
-fn validate_source_id(value: &str) -> rusqlite::Result<()> {
+fn validate_source_id(value: &str) -> rusqlite::Result<String> {
     let id = Uuid::parse_str(value).map_err(error)?;
     if id.get_version_num() != 7 || id.get_variant() != uuid::Variant::RFC4122 {
         return Err(error("derived_from must be one UUIDv7"));
     }
-    Ok(())
+    Ok(id.to_string())
 }
 
 /// Clock adjustments and rapid writes must not make semantic history go backward.
@@ -97,7 +158,8 @@ fn next_mutation(previous: &str) -> rusqlite::Result<String> {
     let previous = DateTime::parse_from_rfc3339(previous).map_err(error)?;
     let now = Local::now().fixed_offset();
     Ok(if now <= previous {
-        (previous + Duration::microseconds(1)).to_rfc3339()
+        previous.checked_add_signed(Duration::microseconds(1))
+            .ok_or_else(|| error("Timestamp overflow"))?.to_rfc3339()
     } else {
         now.to_rfc3339()
     })
@@ -111,6 +173,8 @@ fn row_to_capture(row: &rusqlite::Row<'_>) -> rusqlite::Result<Capture> {
         schema_version: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
+        deleted_at: row.get(11)?,
+        lifecycle_at: row.get(12)?,
         source: row.get(5)?,
         content: row.get(6)?,
         container_id: row.get(7)?,
@@ -121,13 +185,13 @@ fn row_to_capture(row: &rusqlite::Row<'_>) -> rusqlite::Result<Capture> {
 }
 
 const CAPTURE_COLUMNS: &str = "id, type, schema_version, created_at, updated_at,
-    source, content, container_id, title, derived_from, extra_fields";
+    source, content, container_id, title, derived_from, extra_fields, deleted_at, lifecycle_at";
 
 impl Database {
     pub(crate) fn init_capture_tables(&self) -> rusqlite::Result<()> {
         let mut conn = self.conn()?;
         conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;")?;
-        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         tx.execute_batch(
             "CREATE TABLE IF NOT EXISTS containers (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -150,6 +214,8 @@ impl Database {
                 schema_version TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                deleted_at TEXT DEFAULT NULL,
+                lifecycle_at TEXT NOT NULL,
                 source TEXT NOT NULL,
                 content TEXT NOT NULL,
                 container_id TEXT NOT NULL REFERENCES containers(id),
@@ -173,6 +239,36 @@ impl Database {
                 PRIMARY KEY(record_id, device_id)
             );",
         )?;
+        // SQLite cannot ADD a NOT NULL column with a per-row created_at default.
+        // Add a constant sentinel, backfill, and reject future sentinel writes in
+        // this SAME transaction. Other connections see the old schema or the
+        // finished invariant, never the intermediate rows. No table rebuild:
+        // unknown columns, indexes, triggers and presentation FKs are preserved.
+        let columns = tx.prepare("PRAGMA table_info(captures)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !columns.iter().any(|name| name == "deleted_at") {
+            tx.execute_batch("ALTER TABLE captures ADD COLUMN deleted_at TEXT DEFAULT NULL;")?;
+        }
+        if !columns.iter().any(|name| name == "lifecycle_at") {
+            tx.execute_batch(
+                "ALTER TABLE captures ADD COLUMN lifecycle_at TEXT NOT NULL DEFAULT '';
+                 UPDATE captures SET lifecycle_at = created_at;"
+            )?;
+        }
+        tx.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS captures_require_lifecycle_insert
+             BEFORE INSERT ON captures WHEN NEW.lifecycle_at IS NULL OR NEW.lifecycle_at = ''
+             BEGIN SELECT RAISE(ABORT, 'lifecycle_at is required'); END;
+             CREATE TRIGGER IF NOT EXISTS captures_require_lifecycle_update
+             BEFORE UPDATE ON captures WHEN NEW.lifecycle_at IS NULL OR NEW.lifecycle_at = ''
+             BEGIN SELECT RAISE(ABORT, 'lifecycle_at is required'); END;"
+        )?;
+        let invalid: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM captures WHERE lifecycle_at IS NULL OR lifecycle_at = '')",
+            [], |row| row.get(0),
+        )?;
+        if invalid { return Err(error("Invalid lifecycle timestamp during migration")); }
         tx.commit()
     }
 
@@ -180,7 +276,7 @@ impl Database {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT c.id, c.name, c.kind, COUNT(r.id), c.parent_id FROM containers c
-             LEFT JOIN captures r ON r.container_id = c.id GROUP BY c.id
+             LEFT JOIN captures r ON r.container_id = c.id AND r.deleted_at IS NULL GROUP BY c.id
              ORDER BY CASE c.kind WHEN 'waiting_room' THEN 0 ELSE 1 END, c.name COLLATE NOCASE, c.id"
         )?;
         let containers = stmt.query_map([], |row| Ok(Container {
@@ -238,41 +334,70 @@ impl Database {
         content: &str,
         derived_from: Option<&str>,
     ) -> rusqlite::Result<Capture> {
-        if content.trim().is_empty() {
+        self.create_capture_options(content, None, None, "hoverthought/quick-capture", derived_from)
+    }
+
+    pub fn create_quick_capture(&self, content: &str, title: Option<&str>, destination: Option<&str>) -> rusqlite::Result<Capture> {
+        self.create_capture_options(content, title, destination, "hoverthought/quick-capture", None)
+    }
+
+    pub fn create_project_note(&self, content: &str, title: Option<&str>, project: &str) -> rusqlite::Result<Capture> {
+        self.create_capture_options(content, title, Some(project), "hoverthought/project-note", None)
+    }
+
+    fn create_capture_options(&self, content: &str, title: Option<&str>, destination: Option<&str>, source: &str,
+        derived_from: Option<&str>) -> rusqlite::Result<Capture> {
+        let title = title.filter(|value| !value.trim().is_empty());
+        if content.trim().is_empty() && title.is_none() {
             return Err(error("A capture needs some text"));
         }
-        if let Some(source_id) = derived_from {
-            validate_source_id(source_id)?;
-        }
-        // Resolve routing at commit, in the same transaction as the only record
-        // constructor. No frontend route value can override Primary/fallback.
+        let derived_from = derived_from.map(validate_source_id).transpose()?;
+        // Resolve and validate the one-capture destination in the constructor's
+        // transaction. Explicit routing never writes the Primary preference.
         let mut conn = self.conn()?;
         let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let destination: Option<String> = tx.query_row(
+        if let Some(source_id) = derived_from.as_deref() {
+            let deleted: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM captures WHERE id = ? AND deleted_at IS NOT NULL)",
+                [source_id], |row| row.get(0),
+            )?;
+            if deleted { return Err(error("A deleted capture cannot be a derivation source")); }
+        }
+        // Preserve existing nonlocal UUID provenance. Local absence does not
+        // establish nonexistence in another tool; it resolves as unknown here.
+        if let Some(id) = destination {
+            let kind: Option<String> = tx.query_row("SELECT kind FROM containers WHERE id = ?", [id], |row| row.get(0)).optional()?;
+            if kind.is_none() || (source == "hoverthought/project-note" && kind.as_deref() != Some("project")) {
+                return Err(error("Destination must be an existing valid container"));
+            }
+        }
+        let automatic: Option<String> = tx.query_row(
             "SELECT c.id FROM capture_routing r JOIN containers c ON c.id = r.primary_container_id
              WHERE r.singleton = 1 AND c.kind = 'project'", [], |row| row.get(0)
         ).optional()?;
         let record = Capture {
             id: Uuid::now_v7().to_string(),
             record_type: "capture".into(),
-            schema_version: "1.0".into(),
+            schema_version: "1.1".into(),
             created_at: Local::now().to_rfc3339(),
             updated_at: String::new(),
-            source: "hoverthought/quick-capture".into(),
+            deleted_at: None,
+            lifecycle_at: String::new(),
+            source: source.into(),
             content: content.into(),
-            container_id: destination.unwrap_or_else(|| WAITING_ROOM.into()),
-            title: None,
-            derived_from: derived_from.map(str::to_owned),
+            container_id: destination.map(str::to_owned).or(automatic).unwrap_or_else(|| WAITING_ROOM.into()),
+            title: title.map(str::to_owned),
+            derived_from,
             extra_fields: BTreeMap::new(),
         };
-        let record = Capture { updated_at: record.created_at.clone(), ..record };
+        let record = Capture { updated_at: record.created_at.clone(), lifecycle_at: record.created_at.clone(), ..record };
         tx.execute(
             "INSERT INTO captures(id, type, schema_version, created_at, updated_at,
-                source, content, container_id, title, derived_from)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                source, content, container_id, title, derived_from, deleted_at, lifecycle_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![record.id, record.record_type, record.schema_version,
                 record.created_at, record.updated_at, record.source, record.content,
-                record.container_id, record.title, record.derived_from],
+                record.container_id, record.title, record.derived_from, record.deleted_at, record.lifecycle_at],
         )?;
         tx.commit()?;
         Ok(record)
@@ -281,7 +406,7 @@ impl Database {
     pub fn list_captures(&self, container_id: &str) -> rusqlite::Result<Vec<Capture>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
-            "SELECT {CAPTURE_COLUMNS} FROM captures WHERE container_id = ? ORDER BY id DESC"
+            "SELECT {CAPTURE_COLUMNS} FROM captures WHERE container_id = ? AND deleted_at IS NULL ORDER BY id DESC"
         ))?;
         let records = stmt.query_map([container_id], row_to_capture)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -290,8 +415,82 @@ impl Database {
 
     pub fn get_capture(&self, id: &str) -> rusqlite::Result<Capture> {
         let conn = self.conn()?;
+        conn.query_row(&format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ? AND deleted_at IS NULL"),
+            [id], row_to_capture)
+    }
+
+    /// Explicit lifecycle/provenance read, never used by default retrieval.
+    pub fn get_capture_including_deleted(&self, id: &str) -> rusqlite::Result<Capture> {
+        let conn = self.conn()?;
         conn.query_row(&format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?"),
             [id], row_to_capture)
+    }
+
+    pub fn list_deleted_captures(&self) -> rusqlite::Result<Vec<Capture>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {CAPTURE_COLUMNS} FROM captures WHERE deleted_at IS NOT NULL ORDER BY id DESC"
+        ))?;
+        let records = stmt.query_map([], row_to_capture)?.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(records)
+    }
+
+    /// Existing provenance survives soft deletion. A missing source is unknown,
+    /// while real storage/decoding failures still propagate as errors.
+    pub fn resolve_capture_source(&self, record: &Capture) -> rusqlite::Result<Option<Capture>> {
+        match record.derived_from.as_deref() {
+            Some(id) => self.get_capture_including_deleted(&validate_source_id(id)?).optional(),
+            None => Ok(None),
+        }
+    }
+
+    pub fn soft_delete_capture(&self, id: &str) -> rusqlite::Result<Capture> {
+        self.set_capture_deleted(id, true)
+    }
+
+    pub fn restore_capture(&self, id: &str) -> rusqlite::Result<Capture> {
+        self.set_capture_deleted(id, false)
+    }
+
+    fn set_capture_deleted(&self, id: &str, deleted: bool) -> rusqlite::Result<Capture> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let mut record = tx.query_row(&format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?"),
+            [id], row_to_capture)?;
+        // Retried requests are no-ops, not additional lifecycle transitions.
+        if record.deleted_at.is_some() != deleted {
+            if !deleted {
+                let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM containers WHERE id = ?)",
+                    [&record.container_id], |row| row.get(0))?;
+                if !exists {
+                    // Restoration itself is lifecycle-only. Repairing a missing
+                    // destination is a distinct semantic container change.
+                    record.container_id = WAITING_ROOM.into();
+                    record.updated_at = next_mutation(&record.updated_at)?;
+                    tx.execute("UPDATE captures SET container_id = ?, updated_at = ? WHERE id = ?",
+                        params![record.container_id, record.updated_at, id])?;
+                }
+            }
+            // A clock rollback can leave semantic time ahead of lifecycle time.
+            // Advance past BOTH so max(updated_at, lifecycle_at) observes restore.
+            let previous = if DateTime::parse_from_rfc3339(&record.updated_at).map_err(error)?
+                > DateTime::parse_from_rfc3339(&record.lifecycle_at).map_err(error)? {
+                &record.updated_at
+            } else { &record.lifecycle_at };
+            record.lifecycle_at = next_mutation(previous)?;
+            record.deleted_at = deleted.then(|| record.lifecycle_at.clone());
+            tx.execute("UPDATE captures SET deleted_at = ?, lifecycle_at = ? WHERE id = ?",
+                params![record.deleted_at, record.lifecycle_at, id])?;
+        }
+        tx.commit()?;
+        Ok(record)
+    }
+
+    /// No tombstone; presentation cascades, but derived_from is deliberately not
+    /// a foreign key so existing derived records are never blocked or removed.
+    pub fn permanently_delete_capture(&self, id: &str) -> rusqlite::Result<()> {
+        self.conn()?.execute("DELETE FROM captures WHERE id = ?", [id])?;
+        Ok(())
     }
 
     /// Patch only semantic columns. Unknown JSON and future SQL columns survive.
@@ -320,7 +519,7 @@ impl Database {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let mut record = tx.query_row(
-            &format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?"),
+            &format!("SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ? AND deleted_at IS NULL"),
             [id], row_to_capture,
         )?;
         let content = content.unwrap_or(&record.content).to_owned();
@@ -339,6 +538,10 @@ impl Database {
         }
         tx.commit()?;
         Ok(record)
+    }
+
+    pub fn has_capture_presentation(&self, id: &str) -> rusqlite::Result<bool> {
+        self.conn()?.query_row("SELECT EXISTS(SELECT 1 FROM presentation_state WHERE record_id = ? AND device_id = 'local')", [id], |row| row.get(0))
     }
 
     pub fn get_presentation(&self, id: &str) -> rusqlite::Result<Presentation> {

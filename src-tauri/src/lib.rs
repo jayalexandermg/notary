@@ -1,5 +1,7 @@
 mod captures;
 mod capture_runtime;
+mod engaged_notes;
+mod surface_geometry;
 mod db;
 mod foreground;
 mod hotkeys;
@@ -8,8 +10,6 @@ mod tray;
 use tauri::Manager;
 pub use db::{Database, Note, Settings};
 
-#[tauri::command(rename_all = "snake_case")]
-async fn finish_quit(app: tauri::AppHandle) { app.exit(0); }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,6 +24,7 @@ pub fn run() {
             app.manage(Database::new(app_data_dir)?);
             app.manage(capture_runtime::CaptureRuntime::default());
             app.manage(hotkeys::Hotkeys::default());
+            app.manage(engaged_notes::Editors::default());
             capture_runtime::create_surfaces(app.handle())?;
             if let Err(error) = hotkeys::register_hotkeys(app.handle()) {
                 eprintln!("Quick Capture shortcut registration failed: {error}");
@@ -46,14 +47,22 @@ pub fn run() {
             capture_runtime::reassign_capture,
             capture_runtime::list_legacy_notes,
             capture_runtime::get_capture,
-            capture_runtime::engage_capture,
-            capture_runtime::pending_editor,
-            capture_runtime::show_editor,
-            capture_runtime::save_capture_edit,
-            capture_runtime::update_capture_presentation,
             capture_runtime::get_capture_shortcut,
             capture_runtime::set_capture_shortcut,
-            finish_quit,
+            capture_runtime::get_quick_presentation,
+            capture_runtime::update_quick_presentation,
+            capture_runtime::set_capture_router,
+            engaged_notes::engage_capture,
+            engaged_notes::new_project_note,
+            engaged_notes::load_editor,
+            engaged_notes::editor_close_settled,
+            engaged_notes::save_editor,
+            engaged_notes::update_editor_presentation,
+            engaged_notes::trash_editor,
+            engaged_notes::list_deleted_captures,
+            engaged_notes::restore_capture,
+            engaged_notes::permanently_delete_capture,
+            engaged_notes::finish_quit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running HoverThought");

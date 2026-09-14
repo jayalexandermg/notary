@@ -11,6 +11,6 @@ export default function App() {
   catch { return <p role="alert">Open HoverThought as a desktop application.</p>; }
   if (label === 'capture') return <QuickCapture />;
   return <Suspense fallback={null}>
-    {label === 'anchor' ? <AmbientAnchor /> : label === 'editor' ? <CaptureEditor /> : null}
+    {label === 'anchor' ? <AmbientAnchor /> : label.startsWith('editor-') || label.startsWith('draft-') ? <CaptureEditor /> : null}
   </Suspense>;
 }

@@ -3,19 +3,20 @@ use std::{collections::VecDeque, sync::Mutex, time::Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{captures::{Capture, CaptureContext, Container, Presentation, WAITING_ROOM}, foreground, hotkeys, Database, Note};
+use crate::{captures::{Capture, CaptureContext, Container, WAITING_ROOM}, foreground, hotkeys, Database, Note};
 
-pub struct CaptureRuntime(pub Mutex<Runtime>);
+pub struct CaptureRuntime(pub Mutex<Runtime>, Mutex<()>);
 
 impl Default for CaptureRuntime {
     fn default() -> Self {
-        Self(Mutex::new(Runtime { workspace_window: foreground::remember(), ..Runtime::default() }))
+        Self(Mutex::new(Runtime { workspace_window: foreground::remember(), ..Runtime::default() }), Mutex::new(()))
     }
 }
 
 #[derive(Default)]
 pub struct Runtime {
     sequence: u64,
+    capture_css_scale: Option<f64>,
     active: bool,
     completing: bool,
     ready: bool,
@@ -23,11 +24,13 @@ pub struct Runtime {
     previous_window: usize,
     workspace_window: usize,
     committed: Option<Capture>,
-    pending_editor: Option<String>,
-    active_editor: Option<String>,
-    editor_previous_window: usize,
+    invocation: Option<InvocationTiming>,
+    native_focus_ms: Option<f64>,
     samples: VecDeque<Measurement>,
 }
+
+#[derive(Clone, Serialize)]
+struct InvocationTiming { scheduled_ms: f64, admitted_ms: f64, placed_ms: f64, shown_ms: f64, focused_ms: f64 }
 
 #[derive(Clone, Serialize)]
 pub struct Measurement {
@@ -71,7 +74,7 @@ fn sample(state: &mut Runtime, boundary: &str, elapsed: f64) {
 }
 
 pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
-    for (label, width, height) in [("capture", 432.0, 80.0), ("anchor", 24.0, 48.0), ("editor", 330.0, 222.0)] {
+    for (label, width, height) in [("capture", 432.0, 112.0), ("anchor", 24.0, 48.0)] {
         let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
             .title(match label { "capture" => "HoverThought Quick Capture", "editor" => "HoverThought Capture", _ => "HoverThought" })
             .decorations(false).transparent(true).shadow(false).always_on_top(true)
@@ -81,7 +84,7 @@ pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
         let builder = if label == "editor" { builder.min_inner_size(240.0, 180.0) } else { builder };
         let window = builder.build().map_err(|e| e.to_string())?;
         if label == "anchor" {
-            place_anchor(&window, false, 48.0)?;
+            place_anchor(&window, false, 48.0, false, None)?;
             window.show().map_err(|e| e.to_string())?;
         }
         let handle = app.clone();
@@ -89,9 +92,9 @@ pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
         window.on_window_event(move |event| {
             #[cfg(debug_assertions)]
             if owned_label == "capture" && matches!(event, tauri::WindowEvent::Focused(true)) {
-                if let Ok(state) = runtime(&handle).0.lock() {
+                if let Ok(mut state) = runtime(&handle).0.lock() {
                     if let Some(started) = state.started {
-                        eprintln!("capture native focus: {}", serde_json::json!({"sequence":state.sequence,"milliseconds":started.elapsed().as_secs_f64()*1000.0}));
+                        state.native_focus_ms = Some(started.elapsed().as_secs_f64()*1000.0);
                     }
                 }
             }
@@ -105,28 +108,31 @@ pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn place_anchor(window: &WebviewWindow, expanded: bool, requested_height: f64) -> Result<(), String> {
-    let monitor = window.primary_monitor().map_err(|e| e.to_string())?
-        .ok_or("No monitor is available")?;
+fn place_anchor(window: &WebviewWindow, expanded: bool, requested_height: f64, inspector: bool, pixel_ratio: Option<f64>) -> Result<(), String> {
+    let monitor = window.primary_monitor().map_err(|e| e.to_string())?.ok_or("No monitor is available")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let height: f64 = if expanded { requested_height.clamp(120.0, 420.0) } else { 48.0 };
-    let width: f64 = if expanded { 350.0 } else { 24.0 };
-    let height = height.min(area.size.height as f64 / scale);
-    let width = width.min(area.size.width as f64 / scale);
-    let y = area.position.y + ((area.size.height as f64 - height * scale) / 2.0) as i32;
+    let (width, height, regions) = if expanded { crate::surface_geometry::retrieval(requested_height, inspector) }
+        else { (24.0, 48.0, vec![crate::surface_geometry::Rect(0.0, 0.0, 24.0, 48.0)]) };
+    let factor = crate::surface_geometry::css_scale(window, pixel_ratio)?;
+    let (width, height) = (width * factor, height * factor);
+    let regions = regions.into_iter().map(|r| r.scaled(factor)).collect::<Vec<_>>();
+    let y = area.position.y + ((area.size.height as f64 - height * scale) / 2.0).round() as i32;
     window.set_position(tauri::PhysicalPosition::new(area.position.x, y)).map_err(|e| e.to_string())?;
-    window.set_size(tauri::LogicalSize::new(width, height)).map_err(|e| e.to_string())
+    window.set_size(tauri::LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
+    crate::surface_geometry::shape(window, &regions)
 }
 
-fn place_capture(window: &WebviewWindow) -> Result<(), String> {
+fn place_capture(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     let cursor = window.cursor_position().map_err(|e| e.to_string())?;
     let monitor = window.monitor_from_point(cursor.x, cursor.y).map_err(|e| e.to_string())?
         .or(window.primary_monitor().map_err(|e| e.to_string())?).ok_or("No monitor is available")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let width = 432.0_f64.min(area.size.width as f64 / scale);
-    let height = 80.0_f64.min(area.size.height as f64 / scale);
+    // Cache the text/zoom multiplier, not monitor-specific devicePixelRatio.
+    let factor = runtime(app).0.lock().map_err(|_| "Capture state unavailable")?.capture_css_scale.unwrap_or(1.0);
+    let width = (432.0 * factor).min(area.size.width as f64 / scale);
+    let height = (112.0 * factor).min(area.size.height as f64 / scale);
     window.set_size(tauri::LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
     window.set_position(tauri::PhysicalPosition::new(
         area.position.x + ((area.size.width as f64 - width * scale) / 2.0) as i32,
@@ -151,10 +157,18 @@ pub fn show_capture(app: &AppHandle) -> Result<(), String> {
 }
 
 fn show_capture_at(app: &AppHandle, started: Instant) -> Result<(), String> {
+    let _scheduled_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let runtime = runtime(app);
+    // Only complete show/hide operations take this lock. Native callbacks and
+    // readiness use the separate state mutex and cannot wait on this operation.
+    let _operation = runtime.1.lock().map_err(|_| "Capture operation unavailable")?;
+    let _admitted_ms = started.elapsed().as_secs_f64() * 1000.0;
+    if crate::engaged_notes::is_quitting(app) { return Err("Quit is pending".into()); }
     let window = surface(app, "capture")?;
-    let state = runtime(app);
+    let state = &runtime;
     let session = {
         let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
+        if crate::engaged_notes::is_quitting(app) { return Err("Quit is pending".into()); }
         if state.completing { return Ok(()); }
         if !state.active {
             state.sequence += 1;
@@ -162,19 +176,21 @@ fn show_capture_at(app: &AppHandle, started: Instant) -> Result<(), String> {
             state.committed = None;
             state.previous_window = remember_workspace(&mut state);
             state.started = Some(started);
+            state.invocation = None;
+            state.native_focus_ms = None;
         }
         CaptureSession { sequence: state.sequence, active: true }
     };
     // Prepare the existing input before native activation can block its event loop.
-    window.emit("capture-invoked", &session).map_err(|e| e.to_string())?;
-    place_capture(&window)?;
+    window.emit_to("capture", "capture-invoked", &session).map_err(|e| e.to_string())?;
+    place_capture(app, &window)?;
     let _placed = started.elapsed().as_secs_f64() * 1000.0;
     window.show().map_err(|e| e.to_string())?;
     let _shown = started.elapsed().as_secs_f64() * 1000.0;
     window.set_focus().map_err(|e| e.to_string())?;
     let _focused = started.elapsed().as_secs_f64() * 1000.0;
-    #[cfg(debug_assertions)]
-    eprintln!("capture invocation: {}", serde_json::json!({"sequence":session.sequence,"placed_ms":_placed,"shown_ms":_shown,"focused_ms":_focused,"dispatched_ms":started.elapsed().as_secs_f64()*1000.0}));
+    let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
+    state.invocation = Some(InvocationTiming { scheduled_ms: _scheduled_ms, admitted_ms: _admitted_ms, placed_ms: _placed, shown_ms: _shown, focused_ms: _focused });
     Ok(())
 }
 
@@ -187,7 +203,8 @@ pub async fn capture_surface_ready(app: AppHandle) -> Result<CaptureSession, Str
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn capture_input_ready(app: AppHandle, sequence: u64) -> Result<(), String> {
+pub async fn capture_input_ready(app: AppHandle, sequence: u64, frontend_focus_ms: Option<f64>, frontend_ready_ms: Option<f64>) -> Result<(), String> {
+    if [frontend_focus_ms, frontend_ready_ms].into_iter().flatten().any(|ms| !ms.is_finite() || ms < 0.0) { return Err("Invalid frontend readiness duration".into()); }
     let _received = runtime(&app).0.lock().map_err(|_| "Capture state unavailable")?.started.map(|start| start.elapsed().as_secs_f64() * 1000.0);
     let window = surface(&app, "capture")?;
     if !window.is_visible().map_err(|e| e.to_string())? || !window.is_focused().map_err(|e| e.to_string())? {
@@ -197,33 +214,46 @@ pub async fn capture_input_ready(app: AppHandle, sequence: u64) -> Result<(), St
     let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
     if state.active && state.sequence == sequence {
         if let Some(started) = state.started.take() {
+            // Freeze the endpoint before diagnostic output. Console writes are
+            // not part of focused-input readiness and can block for tens of ms.
+            let confirmed_ms = started.elapsed().as_secs_f64() * 1000.0;
             #[cfg(debug_assertions)]
-            eprintln!("capture readiness: {}", serde_json::json!({"sequence":sequence,"ack_received_ms":_received,"confirmed_ms":started.elapsed().as_secs_f64()*1000.0}));
-            sample(&mut state, "hotkey_to_focused_input", started.elapsed().as_secs_f64() * 1000.0);
+            eprintln!("capture readiness: {}", serde_json::json!({"sequence":sequence,"ack_received_ms":_received,"confirmed_ms":confirmed_ms,"frontend_focus_ms":frontend_focus_ms,"frontend_ready_ms":frontend_ready_ms,"invocation":state.invocation,"native_focus_ms":state.native_focus_ms}));
+            sample(&mut state, "hotkey_to_focused_input", confirmed_ms);
         }
     }
     Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn commit_capture(app: AppHandle, sequence: u64, content: String) -> Result<Capture, String> {
+pub async fn commit_capture(app: AppHandle, sequence: u64, content: String, title: Option<String>, container_id: Option<String>) -> Result<Capture, String> {
     let started = Instant::now();
+    let operation = runtime(&app);
+    let _operation = operation.1.lock().map_err(|_| "Capture operation unavailable")?;
     let state = runtime(&app);
     let mut state_guard = state.0.lock().map_err(|_| "Capture state unavailable")?;
     let state = &mut *state_guard;
     if state.sequence != sequence { return Err("This capture session has ended".into()); }
+    if state.completing { return Err("Capture is already being completed".into()); }
     // An IPC retry after persistence must never duplicate a successful capture.
-    let record = if let Some(record) = &state.committed { record.clone() }
+    let record = if let Some(record) = &state.committed {
+        if record.content != content || record.title.as_deref() != title.as_deref().filter(|value| !value.trim().is_empty())
+            || container_id.as_ref().is_some_and(|id| id != &record.container_id) {
+            return Err("Saved; dismiss failed. This capture is already persisted; retry with the saved draft.".into());
+        }
+        record.clone()
+    }
     else {
         if !state.active { return Err("This capture session has ended".into()); }
-        let record = app.state::<Database>().create_capture(&content, None).map_err(|e| e.to_string())?;
+        let record = app.state::<Database>().create_quick_capture(&content, title.as_deref(), container_id.as_deref()).map_err(|e| e.to_string())?;
         state.committed = Some(record.clone());
         record
     };
-    if state.completing { return Err("Capture is already being saved".into()); }
     state.completing = true;
     let previous_window = state.previous_window;
     drop(state_guard);
+    // Persistence is observable even if the following native hide fails.
+    let _ = app.emit("captures-changed", ());
     // Never hold the runtime mutex while dispatching native window work. A
     // global-hotkey callback can run on the native event loop and need this lock.
     let hidden = hide_surface(&app, "capture");
@@ -236,12 +266,13 @@ pub async fn commit_capture(app: AppHandle, sequence: u64, content: String) -> R
         state.active = false;
         sample(&mut state, "commit_ipc_to_persisted_and_hidden", started.elapsed().as_secs_f64() * 1000.0);
     }
-    let _ = app.emit("captures-changed", ());
     Ok(record)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn cancel_capture(app: AppHandle, sequence: u64) -> Result<(), String> {
+    let operation = runtime(&app);
+    let _operation = operation.1.lock().map_err(|_| "Capture operation unavailable")?;
     let state = runtime(&app);
     let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
     if state.sequence != sequence { return Err("This capture session has ended".into()); }
@@ -277,7 +308,7 @@ pub async fn get_capture_measurements(app: AppHandle) -> Result<Vec<Measurement>
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn set_anchor_expanded(app: AppHandle, expanded: bool, focused: bool, height: Option<f64>) -> Result<(), String> {
+pub async fn set_anchor_expanded(app: AppHandle, expanded: bool, focused: bool, height: Option<f64>, inspector: Option<bool>, pixel_ratio: Option<f64>) -> Result<(), String> {
     let height = height.unwrap_or(190.0);
     if !height.is_finite() { return Err("Invalid retrieval height".into()); }
     let window = surface(&app, "anchor")?;
@@ -290,7 +321,7 @@ pub async fn set_anchor_expanded(app: AppHandle, expanded: bool, focused: bool, 
         foreground::restore(previous);
     }
     window.set_focusable(expanded && focused).map_err(|e| e.to_string())?;
-    place_anchor(&window, expanded, height)?;
+    place_anchor(&window, expanded, height, inspector.unwrap_or(false), pixel_ratio)?;
     if expanded && focused { window.set_focus().map_err(|e| e.to_string())?; }
     Ok(())
 }
@@ -337,101 +368,50 @@ pub async fn get_capture(app: AppHandle, id: String) -> Result<Capture, String> 
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn engage_capture(app: AppHandle, id: String) -> Result<(), String> {
-    app.state::<Database>().get_capture(&id).map_err(|e| e.to_string())?;
-    {
-        let state = runtime(&app);
-        let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
-        state.pending_editor = Some(id.clone());
-        if state.active_editor.is_none() { state.editor_previous_window = remember_workspace(&mut state); }
-    }
-    surface(&app, "editor")?.emit("editor-requested", id).map_err(|e| e.to_string())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn pending_editor(app: AppHandle) -> Result<Option<String>, String> {
-    Ok(runtime(&app).0.lock().map_err(|_| "Capture state unavailable")?.pending_editor.clone())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn show_editor(app: AppHandle, id: String) -> Result<Presentation, String> {
-    let state = runtime(&app);
-    let previous_editor = state.0.lock().map_err(|_| "Capture state unavailable")?.active_editor.clone();
-    let db = app.state::<Database>();
-    let window = surface(&app, "editor")?;
-    if let Some(previous) = &previous_editor {
-        if previous != &id {
-            let mut view = db.get_presentation(previous).map_err(|e| e.to_string())?;
-            view.is_open = false;
-            db.save_presentation(&view).map_err(|e| e.to_string())?;
-        }
-    }
-    let mut view = db.get_presentation(&id).map_err(|e| e.to_string())?;
-    window.set_size(tauri::LogicalSize::new(view.width, view.height)).map_err(|e| e.to_string())?;
-    window.set_position(tauri::LogicalPosition::new(view.pos_x, view.pos_y)).map_err(|e| e.to_string())?;
-    // Recover off-screen windows after monitor removal; placement uses physical bounds.
-    let position = window.outer_position().map_err(|e| e.to_string())?;
-    if window.monitor_from_point(position.x as f64 + 30.0, position.y as f64 + 30.0).map_err(|e| e.to_string())?.is_none() {
-        window.center().map_err(|e| e.to_string())?;
-    }
-    window.set_always_on_top(view.always_on_top).map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())?;
-    view.is_open = true;
-    db.save_presentation(&view).map_err(|e| e.to_string())?;
-    state.0.lock().map_err(|_| "Capture state unavailable")?.active_editor = Some(id);
-    let _ = app.emit_to("anchor", "return-to-ambient", ());
-    Ok(view)
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn save_capture_edit(app: AppHandle, id: String, content: String, title: Option<String>, dismiss: bool) -> Result<Capture, String> {
-    let db = app.state::<Database>();
-    let record = db.edit_capture_text(&id, &content, title.as_deref()).map_err(|e| e.to_string())?;
-    let state = runtime(&app);
-    let (active_editor, previous_window) = {
-        let state = state.0.lock().map_err(|_| "Capture state unavailable")?;
-        (state.active_editor.clone(), state.editor_previous_window)
-    };
-    if active_editor.as_deref() == Some(id.as_str()) {
-        let window = surface(&app, "editor")?;
-        let mut view = db.get_presentation(&id).map_err(|e| e.to_string())?;
-        let scale = window.scale_factor().map_err(|e| e.to_string())?;
-        let position = window.outer_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
-        let size = window.inner_size().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
-        view.pos_x = position.x; view.pos_y = position.y;
-        view.width = size.width; view.height = size.height;
-        view.is_open = !dismiss;
-        db.save_presentation(&view).map_err(|e| e.to_string())?;
-        if dismiss {
-            hide_surface(&app, "editor")?;
-            eprintln!("editor foreground restored: {}", foreground::restore(previous_window));
-            {
-                let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
-                state.active_editor = None;
-                state.pending_editor = None;
-            }
-            let _ = app.emit_to("anchor", "return-to-ambient", ());
-        }
-    }
-    let _ = app.emit("captures-changed", ());
-    Ok(record)
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn update_capture_presentation(app: AppHandle, id: String, opacity: f64, always_on_top: bool) -> Result<(), String> {
-    let db = app.state::<Database>();
-    let mut view = db.get_presentation(&id).map_err(|e| e.to_string())?;
-    view.opacity = opacity; view.always_on_top = always_on_top;
-    db.save_presentation(&view).map_err(|e| e.to_string())?;
-    surface(&app, "editor")?.set_always_on_top(always_on_top).map_err(|e| e.to_string())
-}
-
-#[tauri::command(rename_all = "snake_case")]
 pub async fn get_capture_shortcut(app: AppHandle) -> Result<hotkeys::ShortcutStatus, String> { hotkeys::status(&app) }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_capture_shortcut(app: AppHandle, binding: String) -> Result<hotkeys::ShortcutStatus, String> {
     hotkeys::apply_capture_shortcut(&app, &binding)?;
     hotkeys::status(&app)
+}
+
+pub fn workspace(app: &AppHandle) -> Result<usize, String> {
+    let state = runtime(app);
+    let mut state = state.0.lock().map_err(|_| "Capture state unavailable")?;
+    Ok(remember_workspace(&mut state))
+}
+pub fn capture_active(app: &AppHandle) -> Result<bool, String> {
+    Ok(runtime(app).0.lock().map_err(|_| "Capture state unavailable")?.active)
+}
+
+#[derive(Serialize)]
+pub struct SurfacePreferences { opacity: f64, always_on_top: bool }
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_quick_presentation(app: AppHandle) -> Result<SurfacePreferences, String> {
+    let db = app.state::<Database>();
+    let opacity = db.get_setting_opt("capture_surface_opacity").map_err(|e| e.to_string())?
+        .and_then(|value| value.parse::<f64>().ok()).filter(|value| value.is_finite() && (0.1..=1.0).contains(value)).unwrap_or(1.0);
+    let always_on_top = db.get_setting_opt("capture_surface_pin").map_err(|e| e.to_string())?.as_deref() != Some("false");
+    surface(&app, "capture")?.set_always_on_top(always_on_top).map_err(|e| e.to_string())?;
+    Ok(SurfacePreferences { opacity, always_on_top })
+}
+#[tauri::command(rename_all = "snake_case")]
+pub async fn update_quick_presentation(app: AppHandle, opacity: f64, always_on_top: bool) -> Result<(), String> {
+    if !opacity.is_finite() || !(0.1..=1.0).contains(&opacity) { return Err("Invalid opacity".into()); }
+    surface(&app, "capture")?.set_always_on_top(always_on_top).map_err(|e| e.to_string())?;
+    let db = app.state::<Database>();
+    db.set_setting("capture_surface_opacity", &opacity.to_string()).map_err(|e| e.to_string())?;
+    db.set_setting("capture_surface_pin", &always_on_top.to_string()).map_err(|e| e.to_string())
+}
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_capture_router(app: AppHandle, open: bool, pixel_ratio: Option<f64>) -> Result<(), String> {
+    let window = surface(&app, "capture")?;
+    let factor = crate::surface_geometry::css_scale(&window, pixel_ratio)?;
+    runtime(&app).0.lock().map_err(|_| "Capture state unavailable")?.capture_css_scale = Some(factor);
+    window.set_size(tauri::LogicalSize::new(432.0 * factor, (if open { 360.0 } else { 112.0 }) * factor)).map_err(|e| e.to_string())?;
+    let mut regions = vec![crate::surface_geometry::Rect(0.0, 0.0, 432.0, 112.0)];
+    if open { regions.push(crate::surface_geometry::Rect(204.0, 112.0, 228.0, 248.0)); }
+    let regions = regions.into_iter().map(|r| r.scaled(factor)).collect::<Vec<_>>();
+    crate::surface_geometry::shape(&window, &regions)
 }

@@ -18,7 +18,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(window) = app.get_webview_window("anchor") { let _ = window.show(); }
                 let _ = app.emit_to("anchor", "browse-requested", ());
             }
-            "quit" => { let _ = app.emit_to("editor", "quit-requested", ()); }
+            "quit" => { if let Err(error) = crate::engaged_notes::request_quit(app) { let _ = app.emit_to("anchor", "runtime-error", error); } }
             _ => {}
         }).build(app)?;
     Ok(())
