@@ -90,7 +90,7 @@ pub fn create_surfaces(app: &AppHandle) -> Result<(), String> {
         let handle = app.clone();
         let owned_label = label.to_string();
         window.on_window_event(move |event| {
-            #[cfg(debug_assertions)]
+            #[cfg(any(debug_assertions, feature = "phase5-diagnostics"))]
             if owned_label == "capture" && matches!(event, tauri::WindowEvent::Focused(true)) {
                 if let Ok(mut state) = runtime(&handle).0.lock() {
                     if let Some(started) = state.started {
@@ -217,7 +217,7 @@ pub async fn capture_input_ready(app: AppHandle, sequence: u64, frontend_focus_m
             // Freeze the endpoint before diagnostic output. Console writes are
             // not part of focused-input readiness and can block for tens of ms.
             let confirmed_ms = started.elapsed().as_secs_f64() * 1000.0;
-            #[cfg(debug_assertions)]
+            #[cfg(any(debug_assertions, feature = "phase5-diagnostics"))]
             eprintln!("capture readiness: {}", serde_json::json!({"sequence":sequence,"ack_received_ms":_received,"confirmed_ms":confirmed_ms,"frontend_focus_ms":frontend_focus_ms,"frontend_ready_ms":frontend_ready_ms,"invocation":state.invocation,"native_focus_ms":state.native_focus_ms}));
             sample(&mut state, "hotkey_to_focused_input", confirmed_ms);
         }
@@ -228,6 +228,10 @@ pub async fn capture_input_ready(app: AppHandle, sequence: u64, frontend_focus_m
 #[tauri::command(rename_all = "snake_case")]
 pub async fn commit_capture(app: AppHandle, sequence: u64, content: String, title: Option<String>, container_id: Option<String>) -> Result<Capture, String> {
     let started = Instant::now();
+    // Qualification builds require an isolated data directory at startup.
+    // Observe received IPC data without replacing Tauri's immutable transport.
+    #[cfg(feature = "phase5-diagnostics")]
+    eprintln!("capture submission: {}", serde_json::json!({"sequence":sequence,"content":content,"title":title,"container_id":container_id}));
     let operation = runtime(&app);
     let _operation = operation.1.lock().map_err(|_| "Capture operation unavailable")?;
     let state = runtime(&app);
@@ -266,6 +270,8 @@ pub async fn commit_capture(app: AppHandle, sequence: u64, content: String, titl
         state.active = false;
         sample(&mut state, "commit_ipc_to_persisted_and_hidden", started.elapsed().as_secs_f64() * 1000.0);
     }
+    #[cfg(feature = "phase5-diagnostics")]
+    eprintln!("capture committed: {}", serde_json::json!({"sequence":sequence,"record":record}));
     Ok(record)
 }
 
